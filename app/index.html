@@ -67,6 +67,74 @@
     }
     #usher-counter.visible { display: block; }
 
+    /* ── axe score card ── */
+    #axe-score {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #f9fafb;
+      background: #1f2937;
+      border: 1px solid #4b5563;
+      border-radius: 4px;
+      padding: 0.25rem 0.65rem;
+      white-space: nowrap;
+      display: none;
+      position: relative;
+      cursor: default;
+    }
+    #axe-score.visible { display: block; }
+    #axe-score.axe-bad  { color: #fca5a5; border-color: #7f1d1d; }
+    #axe-score.axe-good { color: #86efac; border-color: #14532d; }
+    #axe-breakdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 5px;
+      padding: 0.5rem 0.75rem;
+      min-width: 260px;
+      max-width: 360px;
+      z-index: 9999;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      font-size: 0.74rem;
+      font-weight: 400;
+      color: #d1d5db;
+      line-height: 1.5;
+    }
+    #axe-breakdown.open { display: block; }
+    #axe-breakdown li {
+      list-style: none;
+      border-bottom: 1px solid #374151;
+      padding: 0.3rem 0;
+      color: #fca5a5;
+    }
+    #axe-breakdown li:last-child { border: none; }
+    #axe-breakdown .bd-count {
+      display: inline-block;
+      min-width: 1.6em;
+      font-weight: 700;
+      color: #ef4444;
+      margin-right: 0.4em;
+    }
+
+    /* ── Show Bob's fix button ── */
+    #btn-morph {
+      background: #7c3aed;
+      color: #fff;
+      border: 1px solid #6d28d9;
+      border-radius: 5px;
+      padding: 0.35rem 0.9rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+      display: none;
+    }
+    #btn-morph:hover { background: #6d28d9; }
+    #btn-morph.visible { display: block; }
+
     /* ── Lights button ── */
     .btn-lights {
       margin-left: auto;
@@ -198,6 +266,12 @@
       flex: 1;
       color: #1f2328;
     }
+    .t-was {
+      display: block;
+      font-size: 0.72rem;
+      color: #9ca3af;
+      margin-top: 0.15rem;
+    }
     .t-tag {
       flex-shrink: 0;
       font-size: 0.7rem;
@@ -232,8 +306,14 @@
   <label for="page-select">Page to test:</label>
   <select id="page-select" class="page-select">
     <option value="../demo/broken/index.html">Brightwater Goods (broken)</option>
+    <option value="../demo/fixed/index.html">Brightwater Goods (fixed by Bob)</option>
   </select>
   <span id="usher-counter"></span>
+  <span id="axe-score" tabindex="0" aria-haspopup="true">
+    <span id="axe-score-text"></span>
+    <ul id="axe-breakdown" role="list" aria-label="axe-core rule breakdown"></ul>
+  </span>
+  <button id="btn-morph">Show Bob's fix</button>
   <button class="btn-lights" id="btn-lights">Turn off the lights</button>
 </div>
 
@@ -271,16 +351,29 @@ const btnScan    = document.getElementById('btn-scan');
 const btnRead    = document.getElementById('btn-read');
 const btnStop    = document.getElementById('btn-stop');
 const btnLights  = document.getElementById('btn-lights');
+const btnMorph   = document.getElementById('btn-morph');
 const transcript = document.getElementById('transcript');
 const usherCounter = document.getElementById('usher-counter');
+const axeScore   = document.getElementById('axe-score');
+const axeScoreText = document.getElementById('axe-score-text');
+const axeBreakdown = document.getElementById('axe-breakdown');
 
 let lines = [];      // array of {text, tag, el}
 let speakIndex = -1;
+let morphInProgress = false;
+
+const BROKEN_URL = '../demo/broken/index.html';
+const FIXED_URL  = '../demo/fixed/index.html';
+
+function isBrokenPage() {
+  return select.value === BROKEN_URL;
+}
 
 // ── Page select ──────────────────────────────────────────────────────────────
 select.addEventListener('change', () => {
   frame.src = select.value;
   clearTranscript();
+  hideMorphButton();
 });
 
 // ── Scan ─────────────────────────────────────────────────────────────────────
@@ -507,6 +600,16 @@ function visitNode(root, result, doc) {
     const TEXT_CONTAINERS = new Set(['p','li','td','th','dt','dd','caption','figcaption',
       'blockquote','cite','q','legend','label','span','div']);
     if (TEXT_CONTAINERS.has(tag)) {
+      // Skip <label> that belongs to a form field — screen readers announce it
+      // as part of the field, not as a separate text item. Reading it here too
+      // would cause the duplicate "Email address" problem.
+      if (tag === 'label') {
+        const forAttr = node.getAttribute('for');
+        if (forAttr && doc.getElementById(forAttr)) continue;
+        // Also skip implicit labels whose first child is a form control
+        const firstInput = node.querySelector('input,select,textarea');
+        if (firstInput) continue;
+      }
       const directText = getDirectText(node).trim();
       if (directText) {
         result.push({ text: directText, tag: 'ok', el: node });
@@ -636,8 +739,11 @@ function renderTranscript() {
     const div = document.createElement('div');
     div.className = 't-line';
     div.dataset.index = i;
-    div.innerHTML = `<span class="t-text">${escHtml(line.text)}</span>`
-                  + `<span class="t-tag ${cfg.cls}">${cfg.label}</span>`;
+    let inner = `<span class="t-text">${escHtml(line.text)}`;
+    if (line.was) inner += `<span class="t-was">was: ${escHtml(line.was)}</span>`;
+    inner += `</span>`;
+    inner += `<span class="t-tag ${cfg.cls}">${cfg.label}</span>`;
+    div.innerHTML = inner;
     div.addEventListener('click', () => activateLine(i));
     transcript.appendChild(div);
   });
@@ -651,6 +757,7 @@ function clearTranscript() {
   clearIframeOutline();
   usherCounter.textContent = '';
   usherCounter.classList.remove('visible');
+  hideAxeScore();
 }
 
 function activateLine(i) {
@@ -745,13 +852,19 @@ btnLights.addEventListener('click', () => {
     btnLights.textContent = 'Turn the lights back on';
     btnLights.classList.add('lights-off');
     collapse(doc, lines);
+    // Show "Show Bob's fix" only on the broken page
+    if (isBrokenPage()) showMorphButton();
   } else {
     collapseActive = false;
     btnLights.textContent = 'Turn off the lights';
     btnLights.classList.remove('lights-off');
+    hideMorphButton();
     restore(frame.contentDocument);
   }
 });
+
+function showMorphButton() { btnMorph.classList.add('visible'); }
+function hideMorphButton()  { btnMorph.classList.remove('visible'); }
 
 function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1400,15 +1513,560 @@ function restore(doc) {
   }
 }
 
-// ── morphTo stub ─────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// ── AXE-CORE INTEGRATION ─────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+
 /**
- * STUB — to be implemented in a future task.
- * @param {Document} doc
- * @param {Array} beforeTranscript
- * @param {Array} afterTranscript
+ * Inject axe-core into an iframe document and run a WCAG 2.1 A+AA audit.
+ * Returns a promise that resolves to { nodeCount, rules } where
+ *   nodeCount = total violation nodes across all rules
+ *   rules     = array of { id, description, nodes }
+ */
+function runAxe(iframeDoc) {
+  return new Promise((resolve, reject) => {
+    if (!iframeDoc) { reject(new Error('no doc')); return; }
+
+    // If axe is already loaded in this doc, just run it
+    if (iframeDoc.defaultView && iframeDoc.defaultView.axe) {
+      _execAxe(iframeDoc.defaultView.axe, iframeDoc, resolve, reject);
+      return;
+    }
+
+    // If a script tag is already being injected, wait for it
+    const existingScript = iframeDoc.querySelector('script[src*="axe-core"]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => {
+        const axe = iframeDoc.defaultView && iframeDoc.defaultView.axe;
+        if (axe) _execAxe(axe, iframeDoc, resolve, reject);
+        else reject(new Error('axe not found after existing script load'));
+      }, { once: true });
+      existingScript.addEventListener('error', () => reject(new Error('axe CDN load failed')), { once: true });
+      return;
+    }
+
+    // Inject the script tag
+    const s = iframeDoc.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/axe-core@4.10.2/axe.min.js';
+    s.onload = () => {
+      const axe = iframeDoc.defaultView && iframeDoc.defaultView.axe;
+      if (!axe) { reject(new Error('axe not found after load')); return; }
+      _execAxe(axe, iframeDoc, resolve, reject);
+    };
+    s.onerror = () => reject(new Error('axe CDN load failed'));
+    (iframeDoc.head || iframeDoc.documentElement).appendChild(s);
+  });
+}
+
+function _execAxe(axe, iframeDoc, resolve, reject) {
+  axe.run(
+    iframeDoc,
+    { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } },
+    (err, results) => {
+      if (err) { reject(err); return; }
+      const rules = (results.violations || []).map(v => ({
+        id: v.id,
+        description: v.help || v.id,
+        nodes: v.nodes.length,
+      }));
+      const nodeCount = rules.reduce((s, r) => s + r.nodes, 0);
+      resolve({ nodeCount, rules });
+    }
+  );
+}
+
+/** Show the axe score card in the topbar. */
+function showAxeScore({ nodeCount, rules }) {
+  axeScoreText.textContent = `axe-core: ${nodeCount} problem${nodeCount !== 1 ? 's' : ''} found`;
+  axeScore.className = 'visible ' + (nodeCount > 0 ? 'axe-bad' : 'axe-good');
+
+  axeBreakdown.innerHTML = '';
+  if (rules.length === 0) {
+    const li = document.createElement('li');
+    li.style.color = '#86efac';
+    li.textContent = 'No WCAG 2.1 A/AA violations detected.';
+    axeBreakdown.appendChild(li);
+  } else {
+    rules.forEach(r => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="bd-count">${r.nodes}</span>${escHtml(r.description)}`;
+      axeBreakdown.appendChild(li);
+    });
+  }
+}
+
+function hideAxeScore() {
+  axeScore.className = '';
+  axeScoreText.textContent = '';
+  axeBreakdown.classList.remove('open');
+}
+
+// Toggle breakdown on click/Enter
+axeScore.addEventListener('click', () => {
+  axeBreakdown.classList.toggle('open');
+});
+axeScore.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    axeBreakdown.classList.toggle('open');
+  }
+});
+// Close if user clicks outside
+document.addEventListener('click', e => {
+  if (!axeScore.contains(e.target)) axeBreakdown.classList.remove('open');
+});
+
+// Run axe whenever the iframe finishes loading
+frame.addEventListener('load', () => {
+  const doc = frame.contentDocument;
+  if (!doc || !doc.body) return;
+  runAxe(doc).then(result => {
+    showAxeScore(result);
+  }).catch(() => {
+    hideAxeScore();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── MORPH (Show Bob's fix) ───────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+
+btnMorph.addEventListener('click', () => {
+  if (!collapseActive || morphInProgress) return;
+  morphInProgress = true;
+  hideMorphButton();
+
+  const beforeTranscript = lines.slice(); // snapshot of broken page transcript
+
+  // Load the fixed page into the iframe
+  frame.src = FIXED_URL;
+  select.value = FIXED_URL;
+
+  frame.addEventListener('load', function onFixedLoad() {
+    frame.removeEventListener('load', onFixedLoad);
+
+    const fixedDoc = frame.contentDocument;
+    if (!fixedDoc || !fixedDoc.body) { morphInProgress = false; return; }
+
+    // Build after-transcript from the fixed doc
+    const afterTranscript = buildTranscript(fixedDoc);
+
+    // Apply lights-off state instantly (no drain animation)
+    applyLightsOffInstant(fixedDoc, afterTranscript);
+
+    // Run the morph
+    morphTo(fixedDoc, beforeTranscript, afterTranscript);
+
+    // Update axe score for the fixed page
+    runAxe(fixedDoc).then(result => {
+      showAxeScore(result);
+    }).catch(() => {});
+
+    morphInProgress = false;
+  }, { once: true });
+});
+
+/**
+ * Apply the lights-off overlay instantly (no fade animation) to a newly
+ * loaded document. Used when morphing so the user never sees the page lit.
+ */
+function applyLightsOffInstant(doc, transcriptLines) {
+  const existing = doc.getElementById('__usher_overlay__');
+  if (existing) existing.remove();
+
+  const reduced = prefersReducedMotion();
+
+  const overlay = doc.createElement('div');
+  overlay.id = '__usher_overlay__';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;pointer-events:none;';
+
+  const backdrop = doc.createElement('div');
+  backdrop.id = '__usher_backdrop__';
+  backdrop.style.cssText = `
+    position: absolute; left: 0; top: 0; width: 100%;
+    height: ${Math.max(doc.documentElement.scrollHeight, doc.documentElement.clientHeight)}px;
+    background: #0b0b0c; opacity: 0.94; z-index: 2;
+  `;
+
+  const torchLayer = doc.createElement('div');
+  torchLayer.id = '__usher_torch__';
+  torchLayer.style.cssText = 'position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;';
+
+  const torchSpot = doc.createElement('div');
+  torchSpot.id = '__usher_spot__';
+  torchSpot.style.cssText = 'position:absolute;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);';
+
+  const torchCone = doc.createElement('div');
+  torchCone.id = '__usher_cone__';
+  torchCone.style.cssText = `position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:0;height:0;pointer-events:none;opacity:${reduced ? '0' : '1'};`;
+
+  torchLayer.appendChild(torchCone);
+  torchLayer.appendChild(torchSpot);
+
+  const boxContainer = doc.createElement('div');
+  boxContainer.id = '__usher_boxes__';
+  boxContainer.style.cssText = 'position:fixed;inset:0;z-index:4;pointer-events:none;overflow:hidden;';
+
+  overlay.appendChild(backdrop);
+  overlay.appendChild(torchLayer);
+  overlay.appendChild(boxContainer);
+  doc.documentElement.appendChild(overlay);
+
+  overlay._usherOrigHtmlBg = doc.documentElement.style.background;
+  doc.documentElement.style.background = '#0b0b0c';
+
+  // Instantly hide body content
+  doc.body.style.transition = 'none';
+  doc.body.style.filter = 'grayscale(1) opacity(0.12)';
+  doc.querySelectorAll('img').forEach(img => { img.style.transition = 'none'; img.style.opacity = '0'; });
+
+  scheduleBoxAlignment(doc, boxContainer, transcriptLines);
+}
+
+// ── Role compatibility for morph matching ────────────────────────────────────
+function lineRole(line) {
+  const t = line.text;
+  if (t === 'button' || t.startsWith('button,')) return 'button';
+  if (t === 'link'   || t.startsWith('link,'))   return 'link';
+  if (t === 'image'  || t.startsWith('image,'))  return 'image';
+  if (t.includes('edit text')) return 'input';
+  if (t.includes('combo box')) return 'select';
+  if (t.includes('heading level')) return 'heading';
+  return 'text';
+}
+
+function elementCentre(line) {
+  if (!line.el) return null;
+  const r = line.el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+/**
+ * Match each before-line to an after-line:
+ *  - same role
+ *  - nearest document-coordinate centre
+ * Returns an array of length beforeTranscript.length:
+ *   each entry is the index into afterTranscript, or -1 if unmatched.
+ */
+function matchLines(beforeTranscript, afterTranscript) {
+  const afterByRole = {};
+  afterTranscript.forEach((line, i) => {
+    const role = lineRole(line);
+    if (!afterByRole[role]) afterByRole[role] = [];
+    afterByRole[role].push(i);
+  });
+
+  const usedAfter = new Set();
+  return beforeTranscript.map(bLine => {
+    const role = lineRole(bLine);
+    const bc   = elementCentre(bLine);
+    if (!bc) return -1;
+    const candidates = afterByRole[role] || [];
+    let bestIdx = -1, bestDist = Infinity;
+    for (const ai of candidates) {
+      if (usedAfter.has(ai)) continue;
+      const ac = elementCentre(afterTranscript[ai]);
+      if (!ac) continue;
+      const d = Math.hypot(bc.x - ac.x, bc.y - ac.y);
+      if (d < bestDist) { bestDist = d; bestIdx = ai; }
+    }
+    if (bestIdx !== -1) usedAfter.add(bestIdx);
+    return bestIdx;
+  });
+}
+
+/**
+ * morphTo(doc, beforeTranscript, afterTranscript)
+ *
+ * Animates the transition from the broken page's accessibility boxes to
+ * the fixed page's boxes, in the already-lights-off fixed doc.
  */
 function morphTo(doc, beforeTranscript, afterTranscript) {
-  // TODO: implement morph animation
+  const reduced   = prefersReducedMotion();
+  const STAGGER   = 120; // ms between flips
+  const VOICE_MAX = 8;
+
+  const boxContainer = doc.getElementById('__usher_boxes__');
+  if (!boxContainer) return;
+
+  // Render after-boxes (hidden, will become visible as morphed into)
+  const afterBoxEls = buildAfterBoxEls(doc, afterTranscript, boxContainer);
+
+  // Match before -> after
+  const mapping = matchLines(beforeTranscript, afterTranscript);
+
+  // Track how many before-items have been flipped so far
+  let flippedProblems  = beforeTranscript.filter(l => isProblemLine(l)).length;
+  let flippedTotal     = beforeTranscript.length;
+
+  const voices   = window.speechSynthesis.getVoices();
+  const enVoice  = voices.find(v => v.lang.startsWith('en'));
+  let   voiceIdx = 0;
+
+  // Update the right-panel transcript to show after-lines with "was:" notes
+  // and update the counter live
+  const afterLines = afterTranscript.map((line, ai) => ({ ...line }));
+
+  // For each before-line in reading order, schedule a flip
+  beforeTranscript.forEach((bLine, bi) => {
+    const ai = mapping[bi];
+    const delay = STAGGER * bi;
+
+    setTimeout(() => {
+      if (!doc.getElementById('__usher_overlay__')) return;
+
+      const aLine = ai >= 0 ? afterTranscript[ai] : null;
+
+      if (ai >= 0 && afterBoxEls[ai]) {
+        const afterBox = afterBoxEls[ai];
+
+        if (reduced) {
+          // No animation — just swap label text
+          afterBox.style.opacity = '1';
+          // Remove "before" placeholder if it was in the container
+          const beforePlaceholder = boxContainer.querySelector(`[data-usher-morph-before="${bi}"]`);
+          if (beforePlaceholder) beforePlaceholder.remove();
+        } else {
+          // Draw the "before" ghost box at the AFTER element's position first
+          const ghostBox = buildGhostBox(doc, bLine, aLine, bi);
+          if (ghostBox) {
+            boxContainer.appendChild(ghostBox);
+            // Small pause then flip
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                // Flip: rotateX from before-label to after box
+                flipBox(doc, ghostBox, afterBox, bLine, aLine);
+              }, 60);
+            });
+          } else {
+            afterBox.style.opacity = '1';
+          }
+        }
+
+        // Move torch to this after-element
+        torchIndex = ai;
+        lines = afterLines; // point torch to after-doc elements
+        if (collapseActive) {
+          // Manually reposition torch using after element
+          repositionTorchToEl(doc, aLine.el);
+        }
+      } else {
+        // Unmatched before-line: fade out if it has a placeholder
+        const beforePlaceholder = boxContainer.querySelector(`[data-usher-morph-before="${bi}"]`);
+        if (beforePlaceholder) {
+          beforePlaceholder.style.transition = 'opacity 0.3s ease';
+          beforePlaceholder.style.opacity    = '0';
+          setTimeout(() => beforePlaceholder.remove(), 350);
+        }
+      }
+
+      // Update counter: count down
+      if (isProblemLine(bLine) && ai >= 0 && !isProblemLine(aLine || { tag: 'ok' })) {
+        flippedProblems--;
+      }
+      updateCounter(flippedProblems, flippedTotal);
+
+      // Voice: read first VOICE_MAX fixed lines
+      if (aLine && !reduced && voiceIdx < VOICE_MAX) {
+        voiceIdx++;
+        const u = new SpeechSynthesisUtterance(aLine.text);
+        u.lang = 'en-US'; u.rate = 1.1;
+        if (enVoice) u.voice = enVoice;
+        window.speechSynthesis.speak(u);
+      }
+
+      // Update transcript panel
+      updateTranscriptLine(bi, bLine, aLine);
+
+    }, delay);
+  });
+
+  // After all flips, update lines to afterLines so the panel is synced,
+  // and land torch on item 0
+  const totalDelay = STAGGER * beforeTranscript.length + 400;
+  setTimeout(() => {
+    if (!doc.getElementById('__usher_overlay__')) return;
+
+    lines = afterLines;
+    renderTranscript();
+    btnRead.disabled = lines.length === 0;
+
+    updateCounter(
+      afterTranscript.filter(l => isProblemLine(l)).length,
+      afterTranscript.length
+    );
+
+    // Show torch layer and land on item 0
+    const torchLayerEl = doc.getElementById('__usher_torch__');
+    if (torchLayerEl) { torchLayerEl.style.opacity = '1'; torchMoveTo(0); }
+    torchStartFlicker();
+  }, totalDelay);
+}
+
+/** Build all after-doc boxes, hidden, in the boxContainer. Returns array keyed by after-index. */
+function buildAfterBoxEls(doc, afterTranscript, container) {
+  const els = [];
+  afterTranscript.forEach((line, ai) => {
+    if (!line.el || !line.el.isConnected) { els.push(null); return; }
+    const rawRect = line.el.getBoundingClientRect();
+    const MIN_BOX = 36;
+    let bw = rawRect.width, bh = rawRect.height;
+    let bl = rawRect.left,  bt = rawRect.top;
+    if (bw < MIN_BOX) { bl -= (MIN_BOX - bw) / 2; bw = MIN_BOX; }
+    if (bh < MIN_BOX) { bt -= (MIN_BOX - bh) / 2; bh = MIN_BOX; }
+
+    const isBroken = isProblemLine(line);
+    const box = doc.createElement('div');
+    box.dataset.usherIndex = ai;
+    box.style.cssText = `
+      position: fixed;
+      left: ${bl}px; top: ${bt}px;
+      width: ${bw}px; height: ${bh}px;
+      background: ${isBroken ? '#3a3a3a' : '#1e293b'};
+      border: ${isBroken ? '1.5px solid #ef4444' : '1.5px solid #22c55e'};
+      border-radius: 2px;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+      opacity: 0;
+      box-sizing: border-box;
+      pointer-events: none;
+    `;
+
+    // Add label
+    const isLarge = bw > 400 && bh > 250;
+    const baseFontSize = Math.min(10, bh * 0.6);
+    const fontSize = Math.max(9, Math.min(baseFontSize, bw * 0.35));
+    const label = doc.createElement('span');
+    if (isLarge) {
+      box.style.alignItems = 'flex-start';
+      box.style.justifyContent = 'flex-start';
+      label.style.cssText = `position:absolute;top:12px;left:12px;font-family:-apple-system,"Segoe UI",system-ui,sans-serif;font-size:${fontSize}px;font-weight:400;color:#94a3b8;line-height:1.2;pointer-events:none;`;
+    } else {
+      label.style.cssText = `font-family:-apple-system,"Segoe UI",system-ui,sans-serif;font-size:${fontSize}px;font-weight:400;color:#94a3b8;text-align:center;padding:2px 4px;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none;`;
+    }
+    label.textContent = line.text;
+    box.appendChild(label);
+    container.appendChild(box);
+    els.push(box);
+  });
+  return els;
+}
+
+/**
+ * Build a "ghost" box showing the BEFORE label at the AFTER element's position.
+ * Returns the DOM element, or null if the after-element has no valid rect.
+ */
+function buildGhostBox(doc, bLine, aLine, bi) {
+  if (!aLine || !aLine.el) return null;
+  const rawRect = aLine.el.getBoundingClientRect();
+  if (!rawRect || (rawRect.width === 0 && rawRect.height === 0)) return null;
+
+  const MIN_BOX = 36;
+  let bw = rawRect.width, bh = rawRect.height;
+  let bl = rawRect.left,  bt = rawRect.top;
+  if (bw < MIN_BOX) { bl -= (MIN_BOX - bw) / 2; bw = MIN_BOX; }
+  if (bh < MIN_BOX) { bt -= (MIN_BOX - bh) / 2; bh = MIN_BOX; }
+
+  const box = doc.createElement('div');
+  box.dataset.usherMorphBefore = bi;
+  box.style.cssText = `
+    position: fixed;
+    left: ${bl}px; top: ${bt}px;
+    width: ${bw}px; height: ${bh}px;
+    background: #3a3a3a;
+    border: 1.5px solid #ef4444;
+    border-radius: 2px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    opacity: 1;
+    box-sizing: border-box;
+    pointer-events: none;
+    perspective: 400px;
+  `;
+
+  const label = doc.createElement('span');
+  const fontSize = Math.max(9, Math.min(Math.min(10, bh * 0.6), bw * 0.35));
+  label.style.cssText = `
+    font-family: -apple-system,"Segoe UI",system-ui,sans-serif;
+    font-size: ${fontSize}px; font-weight: 700;
+    color: #f9fafb; text-align: center; padding: 2px 4px;
+    line-height: 1.2; max-width: 100%; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+    letter-spacing: 0.05em; text-transform: uppercase;
+  `;
+  label.textContent = boxLabelForLine(bLine);
+  box.appendChild(label);
+  return box;
+}
+
+/** Flip a ghost box (before label) into the after-box with a rotateX animation. */
+function flipBox(doc, ghostBox, afterBox, bLine, aLine) {
+  // Face A (broken, red) rotates away; face B (fixed, green) rotates in
+  ghostBox.style.transition = 'transform 0.28s ease-in, opacity 0.28s ease-in';
+  ghostBox.style.transformOrigin = '50% 50%';
+  ghostBox.style.transform = 'rotateX(90deg)';
+  ghostBox.style.opacity = '0';
+
+  setTimeout(() => {
+    ghostBox.remove();
+    afterBox.style.transition = 'none';
+    afterBox.style.transform = 'rotateX(-90deg)';
+    afterBox.style.opacity = '1';
+    // Force reflow
+    void afterBox.offsetHeight;
+    afterBox.style.transition = 'transform 0.28s ease-out';
+    afterBox.style.transform = 'rotateX(0deg)';
+    // Thin green edge
+    afterBox.style.border = '1.5px solid #22c55e';
+  }, 200);
+}
+
+/** Reposition torch to a specific element without triggering scrollIntoView. */
+function repositionTorchToEl(doc, el) {
+  if (!el) return;
+  const rawRect = el.getBoundingClientRect();
+  const cx = rawRect.left + rawRect.width  / 2;
+  const cy = rawRect.top  + rawRect.height / 2;
+  const radius = Math.max(70, Math.max(rawRect.width, rawRect.height) / 2 + 60);
+  const diam   = radius * 2;
+  const reduced = prefersReducedMotion();
+
+  const spot = doc.getElementById('__usher_spot__');
+  if (spot) {
+    spot.style.cssText = `
+      position: absolute; width: ${diam}px; height: ${diam}px;
+      left: ${cx}px; top: ${cy}px;
+      border-radius: 50%; pointer-events: none;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(circle, #ffe2b0 0%, rgba(255,200,100,0.55) 25%, rgba(255,160,60,0.18) 55%, transparent 75%);
+      transition: ${reduced ? 'none' : 'left 0.35s ease, top 0.35s ease, width 0.35s ease, height 0.35s ease'};
+    `;
+  }
+}
+
+/** Update a single transcript line during the morph. */
+function updateTranscriptLine(bi, bLine, aLine) {
+  const div = transcript.querySelector(`[data-index="${bi}"]`);
+  if (!div) return;
+
+  if (aLine) {
+    const cfg = TAG_CONFIG[aLine.tag] || TAG_CONFIG.ok;
+    const wasText = bLine.text !== aLine.text ? bLine.text : null;
+    let inner = `<span class="t-text">${escHtml(aLine.text)}`;
+    if (wasText) inner += `<span class="t-was">was: ${escHtml(wasText)}</span>`;
+    inner += `</span>`;
+    inner += `<span class="t-tag ${cfg.cls}">${cfg.label}</span>`;
+    div.innerHTML = inner;
+    div.addEventListener('click', () => {
+      clearActiveHighlight();
+      div.classList.add('active');
+      outlineElement(aLine.el);
+      scrollIntoIframe(aLine.el);
+    });
+    // Brief flash
+    div.style.background = '#d1fae5';
+    setTimeout(() => { div.style.background = ''; }, 600);
+  }
 }
 
 </script>
