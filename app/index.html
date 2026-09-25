@@ -135,9 +135,88 @@
     #btn-morph:hover { background: #6d28d9; }
     #btn-morph.visible { display: block; }
 
+    /* ── Try it blind button ── */
+    #btn-blind {
+      margin-left: auto;
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid #475569;
+      border-radius: 5px;
+      padding: 0.35rem 0.9rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    #btn-blind:hover { background: #1e293b; }
+    #btn-blind.blind-active {
+      background: #000;
+      color: #facc15;
+      border-color: #713f12;
+    }
+
+    /* ── Blind mode overlay (full-page black) ── */
+    #blind-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 2000000;
+      background: #000;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #blind-overlay.active { display: flex; }
+
+    /* Start card shown at entry */
+    #blind-start-card {
+      background: #111;
+      color: #f1f5f9;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 2rem 2.5rem;
+      max-width: 540px;
+      font-size: 1rem;
+      line-height: 1.7;
+      text-align: center;
+      box-shadow: 0 0 40px rgba(0,0,0,0.8);
+    }
+    #blind-start-card h2 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      color: #facc15;
+    }
+    #blind-start-card kbd {
+      background: #1e293b;
+      border: 1px solid #475569;
+      border-radius: 3px;
+      padding: 0 4px;
+      font-size: 0.88em;
+      font-family: monospace;
+    }
+
+    /* Live caption shown while navigating */
+    #blind-caption {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 2000001;
+      background: #000;
+      color: #fff;
+      font-size: clamp(1.5rem, 4vw, 2.8rem);
+      font-weight: 600;
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 3rem;
+      line-height: 1.3;
+    }
+    #blind-caption.visible { display: flex; }
+
     /* ── Lights button ── */
     .btn-lights {
-      margin-left: auto;
       background: #374151;
       color: #f9fafb;
       border: 1px solid #4b5563;
@@ -314,8 +393,25 @@
     <ul id="axe-breakdown" role="list" aria-label="axe-core rule breakdown"></ul>
   </span>
   <button id="btn-morph">Show Bob's fix</button>
+  <button id="btn-blind">Try it blind</button>
   <button class="btn-lights" id="btn-lights">Turn off the lights</button>
 </div>
+
+<!-- Blind User Mode overlay (sits above everything) -->
+<div id="blind-overlay" role="dialog" aria-modal="true" aria-label="Blind User Mode">
+  <div id="blind-start-card">
+    <h2>Blind User Mode</h2>
+    <p>Close your eyes if you like.<br>
+    <kbd>Tab</kbd> moves between controls &nbsp;·&nbsp;
+    <kbd>↓</kbd><kbd>↑</kbd> read line by line<br>
+    <kbd>Enter</kbd> presses a control &nbsp;·&nbsp;
+    <kbd>H</kbd> jumps to the next heading<br>
+    <kbd>Shift+H</kbd> jumps to the previous heading<br>
+    <kbd>Esc</kbd> leaves this mode</p>
+  </div>
+</div>
+<!-- Caption layer (white text on black, replaces entire screen while navigating) -->
+<div id="blind-caption" aria-live="assertive" aria-atomic="true"></div>
 
 <div class="main">
   <div class="iframe-pane">
@@ -374,6 +470,8 @@ select.addEventListener('change', () => {
   frame.src = select.value;
   clearTranscript();
   hideMorphButton();
+  // If blind mode is active, the frame load handler will re-attach listeners
+  // and keep the mode on — nothing else needed here.
 });
 
 // ── Scan ─────────────────────────────────────────────────────────────────────
@@ -1803,9 +1901,15 @@ function morphTo(doc, beforeTranscript, afterTranscript) {
   const enVoice  = voices.find(v => v.lang.startsWith('en'));
   let   voiceIdx = 0;
 
-  // Update the right-panel transcript to show after-lines with "was:" notes
-  // and update the counter live
-  const afterLines = afterTranscript.map((line, ai) => ({ ...line }));
+  // Build afterLines with .was populated where the spoken text changed.
+  // These "was:" annotations survive the final renderTranscript() call.
+  const afterLines = afterTranscript.map((aLine, ai) => {
+    // Find the before-line that maps to this after-line
+    const bi = mapping.indexOf(ai);
+    const bLine = bi >= 0 ? beforeTranscript[bi] : null;
+    const was = (bLine && bLine.text !== aLine.text) ? bLine.text : undefined;
+    return { ...aLine, ...(was ? { was } : {}) };
+  });
 
   // For each before-line in reading order, schedule a flip
   beforeTranscript.forEach((bLine, bi) => {
@@ -1887,6 +1991,8 @@ function morphTo(doc, beforeTranscript, afterTranscript) {
   setTimeout(() => {
     if (!doc.getElementById('__usher_overlay__')) return;
 
+    // Preserve the "was" annotations set by updateTranscriptLine during flips.
+    // afterLines may have .was set already; re-render honours those.
     lines = afterLines;
     renderTranscript();
     btnRead.disabled = lines.length === 0;
@@ -1906,6 +2012,11 @@ function morphTo(doc, beforeTranscript, afterTranscript) {
 /** Build all after-doc boxes, hidden, in the boxContainer. Returns array keyed by after-index. */
 function buildAfterBoxEls(doc, afterTranscript, container) {
   const els = [];
+
+  // Pill collision tracking (same as drawBoxes)
+  let lastTinyRight = -Infinity;
+  let lastTinyAbove = true;
+
   afterTranscript.forEach((line, ai) => {
     if (!line.el || !line.el.isConnected) { els.push(null); return; }
     const rawRect = line.el.getBoundingClientRect();
@@ -1916,6 +2027,8 @@ function buildAfterBoxEls(doc, afterTranscript, container) {
     if (bh < MIN_BOX) { bt -= (MIN_BOX - bh) / 2; bh = MIN_BOX; }
 
     const isBroken = isProblemLine(line);
+    const labelText = line.text;
+
     const box = doc.createElement('div');
     box.dataset.usherIndex = ai;
     box.style.cssText = `
@@ -1932,20 +2045,80 @@ function buildAfterBoxEls(doc, afterTranscript, container) {
       pointer-events: none;
     `;
 
-    // Add label
-    const isLarge = bw > 400 && bh > 250;
-    const baseFontSize = Math.min(10, bh * 0.6);
-    const fontSize = Math.max(9, Math.min(baseFontSize, bw * 0.35));
-    const label = doc.createElement('span');
-    if (isLarge) {
-      box.style.alignItems = 'flex-start';
-      box.style.justifyContent = 'flex-start';
-      label.style.cssText = `position:absolute;top:12px;left:12px;font-family:-apple-system,"Segoe UI",system-ui,sans-serif;font-size:${fontSize}px;font-weight:400;color:#94a3b8;line-height:1.2;pointer-events:none;`;
+    const TINY_THRESHOLD = 70;
+    const isTiny = bw < TINY_THRESHOLD;
+
+    if (isTiny) {
+      box.style.overflow = 'visible';
+
+      const PILL_H = 22;
+      const CONNECTOR_H = 6;
+      const pillCentreX = bl + bw / 2;
+      const estPillHalfW = Math.max(labelText.length * 6 + 6, 20);
+      const pillLeft  = pillCentreX - estPillHalfW;
+      const pillRight = pillCentreX + estPillHalfW;
+      const overlaps = pillLeft < lastTinyRight;
+      let pillAbove;
+      if (overlaps) {
+        pillAbove = !lastTinyAbove;
+      } else {
+        pillAbove = bt >= PILL_H + CONNECTOR_H + 4;
+      }
+      lastTinyRight = pillRight;
+      lastTinyAbove = pillAbove;
+
+      const connector = doc.createElement('div');
+      connector.style.cssText = `
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 1px;
+        height: ${CONNECTOR_H}px;
+        background: ${isBroken ? '#ef4444' : '#22c55e'};
+        pointer-events: none;
+        ${pillAbove ? `bottom: ${bh}px;` : `top: ${bh}px;`}
+      `;
+
+      const pill = doc.createElement('span');
+      pill.style.cssText = `
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        ${pillAbove ? `bottom: ${bh + CONNECTOR_H}px;` : `top: ${bh + CONNECTOR_H}px;`}
+        white-space: nowrap;
+        font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        color: #1f2328;
+        background: ${isBroken ? '#fca5a5' : '#bbf7d0'};
+        border: 1px solid ${isBroken ? '#ef4444' : '#22c55e'};
+        border-radius: 4px;
+        padding: 2px 3px;
+        line-height: 1.4;
+        pointer-events: none;
+        z-index: 1;
+      `;
+      pill.textContent = labelText;
+
+      box.appendChild(connector);
+      box.appendChild(pill);
     } else {
-      label.style.cssText = `font-family:-apple-system,"Segoe UI",system-ui,sans-serif;font-size:${fontSize}px;font-weight:400;color:#94a3b8;text-align:center;padding:2px 4px;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none;`;
+      // Normal label inside the box
+      const isLarge = bw > 400 && bh > 250;
+      const baseFontSize = Math.min(10, bh * 0.6);
+      const fontSize = Math.max(9, Math.min(baseFontSize, bw * 0.35));
+      const label = doc.createElement('span');
+      if (isLarge) {
+        box.style.alignItems = 'flex-start';
+        box.style.justifyContent = 'flex-start';
+        label.style.cssText = `position:absolute;top:12px;left:12px;font-family:-apple-system,"Segoe UI",system-ui,sans-serif;font-size:${fontSize}px;font-weight:400;color:#94a3b8;line-height:1.2;pointer-events:none;`;
+      } else {
+        label.style.cssText = `font-family:-apple-system,"Segoe UI",system-ui,sans-serif;font-size:${fontSize}px;font-weight:400;color:#94a3b8;text-align:center;padding:2px 4px;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none;`;
+      }
+      label.textContent = labelText;
+      box.appendChild(label);
     }
-    label.textContent = line.text;
-    box.appendChild(label);
+
     container.appendChild(box);
     els.push(box);
   });
@@ -2068,6 +2241,320 @@ function updateTranscriptLine(bi, bLine, aLine) {
     setTimeout(() => { div.style.background = ''; }, 600);
   }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── BLIND USER MODE ──────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+
+const btnBlind      = document.getElementById('btn-blind');
+const blindOverlay  = document.getElementById('blind-overlay');
+const blindCaption  = document.getElementById('blind-caption');
+
+let blindActive       = false;
+let blindLineIndex    = -1;  // current browse-mode line index (-1 = not in browse mode)
+let blindFocusables   = [];  // live list rebuilt on entry / page change
+let blindFocusIndex   = -1;  // which focusable is current focus
+let blindStartCard    = document.getElementById('blind-start-card');
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function blindSpeak(text) {
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-US';
+  u.rate = 1.0;
+  const voices = window.speechSynthesis.getVoices();
+  const enVoice = voices.find(v => v.lang.startsWith('en'));
+  if (enVoice) u.voice = enVoice;
+  window.speechSynthesis.speak(u);
+  showCaption(text);
+}
+
+function showCaption(text) {
+  blindCaption.textContent = text;
+  blindCaption.classList.add('visible');
+}
+
+function hideCaption() {
+  blindCaption.classList.remove('visible');
+  blindCaption.textContent = '';
+}
+
+/**
+ * Collect all focusable elements inside the iframe document in DOM order.
+ * Same elements a keyboard user would Tab through.
+ */
+function collectFocusables(doc) {
+  if (!doc) return [];
+  const sel = [
+    'a[href]', 'button:not([disabled])', 'input:not([disabled]):not([type="hidden"])',
+    'select:not([disabled])', 'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+  return Array.from(doc.querySelectorAll(sel)).filter(el => {
+    if (isHidden(el)) return false;
+    return true;
+  });
+}
+
+/**
+ * Return the spoken text for a focusable element.
+ * Mirrors the same logic used in buildTranscript but for a single element.
+ */
+function spokenTextForEl(el) {
+  if (!el) return '';
+  // Use the lines array if we already have a transcript for this page
+  if (lines.length > 0) {
+    const found = lines.find(l => l.el === el);
+    if (found) return found.text;
+  }
+  // Fallback: compute on the fly
+  const tag  = el.tagName.toLowerCase();
+  const role = el.getAttribute('role') || null;
+  if (tag === 'button' || role === 'button') {
+    const name = computeAccessibleName(el).trim();
+    return name ? `button, ${name}` : 'button';
+  }
+  if (tag === 'a' && el.hasAttribute('href')) {
+    const name = computeAccessibleName(el).trim();
+    return name ? `link, ${name}` : 'link';
+  }
+  if (tag === 'input') {
+    const name = computeAccessibleName(el).trim();
+    const type = (el.getAttribute('type') || 'text').toLowerCase();
+    const roleLabel = type === 'search' ? 'search edit text'
+      : type === 'password' ? 'password edit text'
+      : type === 'checkbox' ? 'checkbox'
+      : type === 'radio'    ? 'radio button'
+      : (type === 'submit' || type === 'button' || type === 'reset') ? 'button'
+      : 'edit text';
+    return name ? `${roleLabel}, ${name}` : roleLabel;
+  }
+  if (tag === 'select') {
+    const name = computeAccessibleName(el).trim();
+    return name ? `combo box, ${name}` : 'combo box';
+  }
+  if (tag === 'textarea') {
+    const name = computeAccessibleName(el).trim();
+    return name ? `edit text, ${name}` : 'edit text';
+  }
+  const name = computeAccessibleName(el).trim();
+  return name || el.tagName.toLowerCase();
+}
+
+/**
+ * Rebuild the line list from the current iframe doc (if not already done).
+ */
+function ensureLines() {
+  const doc = frame.contentDocument;
+  if (lines.length === 0 && doc && doc.body) {
+    lines = buildTranscript(doc);
+  }
+}
+
+// ── Enter / Leave ─────────────────────────────────────────────────────────────
+
+function enterBlindMode() {
+  ensureLines();
+  blindActive     = true;
+  blindLineIndex  = -1;
+  blindFocusIndex = -1;
+  const doc = frame.contentDocument;
+  blindFocusables = doc ? collectFocusables(doc) : [];
+
+  btnBlind.classList.add('blind-active');
+  btnBlind.textContent = 'Leave blind mode';
+
+  // Show black overlay (stays up for the entire session)
+  blindOverlay.classList.add('active');
+  // Ensure start card is visible at entry
+  blindStartCard.style.display = '';
+
+  // Speak start card text. Do NOT show the caption yet — the card IS the caption.
+  window.speechSynthesis.cancel();
+  const intro = 'Blind User Mode. Close your eyes if you like. Tab moves between controls. Down and Up arrows read line by line. Enter presses. H jumps to the next heading. Escape leaves.';
+  const u0 = new SpeechSynthesisUtterance(intro);
+  u0.lang = 'en-US'; u0.rate = 1.0;
+  const voices0 = window.speechSynthesis.getVoices();
+  const enVoice0 = voices0.find(v => v.lang.startsWith('en'));
+  if (enVoice0) u0.voice = enVoice0;
+  window.speechSynthesis.speak(u0);
+
+  // After intro finishes (approx), hide the card — the overlay stays black
+  const introDuration = Math.max(2000, intro.length * 55);
+  setTimeout(() => {
+    if (!blindActive) return;
+    blindStartCard.style.display = 'none';
+    // Move focus into the iframe so key events originate there
+    if (doc && doc.body) {
+      try {
+        // body needs tabIndex to be programmatically focusable
+        if (!doc.body.hasAttribute('tabindex')) {
+          doc.body.setAttribute('tabindex', '-1');
+          doc.body._usherAddedTabIndex = true;
+        }
+        doc.body.focus();
+      } catch {}
+    }
+  }, introDuration);
+
+  // Attach key listeners
+  document.addEventListener('keydown', blindKeyHandler, { capture: true });
+  // Also listen inside the iframe
+  if (doc) {
+    doc.addEventListener('keydown', blindKeyHandler, { capture: true });
+  }
+}
+
+function leaveBlindMode() {
+  blindActive = false;
+  blindOverlay.classList.remove('active');
+  blindStartCard.style.display = '';   // reset for next entry
+  hideCaption();
+  window.speechSynthesis.cancel();
+
+  btnBlind.classList.remove('blind-active');
+  btnBlind.textContent = 'Try it blind';
+
+  document.removeEventListener('keydown', blindKeyHandler, { capture: true });
+  const doc = frame.contentDocument;
+  if (doc) {
+    doc.removeEventListener('keydown', blindKeyHandler, { capture: true });
+    // Clean up any tabindex we temporarily added to the body
+    if (doc.body && doc.body._usherAddedTabIndex) {
+      doc.body.removeAttribute('tabindex');
+      delete doc.body._usherAddedTabIndex;
+    }
+  }
+
+  btnBlind.focus();
+}
+
+// ── Key handler ───────────────────────────────────────────────────────────────
+
+function blindKeyHandler(e) {
+  if (!blindActive) return;
+
+  // Always let Esc through to leave
+  if (e.key === 'Escape') {
+    e.preventDefault(); e.stopPropagation();
+    leaveBlindMode();
+    return;
+  }
+
+  // Tab / Shift+Tab — real focus navigation
+  if (e.key === 'Tab') {
+    e.preventDefault(); e.stopPropagation();
+    const doc = frame.contentDocument;
+    blindFocusables = doc ? collectFocusables(doc) : [];
+    if (blindFocusables.length === 0) { blindSpeak('No focusable elements'); return; }
+
+    if (e.shiftKey) {
+      blindFocusIndex = (blindFocusIndex <= 0)
+        ? blindFocusables.length - 1
+        : blindFocusIndex - 1;
+    } else {
+      blindFocusIndex = (blindFocusIndex >= blindFocusables.length - 1)
+        ? 0
+        : blindFocusIndex + 1;
+    }
+
+    const el = blindFocusables[blindFocusIndex];
+    try { el.focus(); } catch {}
+    const spoken = spokenTextForEl(el);
+    blindSpeak(spoken);
+    // Sync browse-mode line index to this element
+    const li = lines.findIndex(l => l.el === el);
+    if (li >= 0) blindLineIndex = li;
+    return;
+  }
+
+  // Down arrow — next transcript line
+  if (e.key === 'ArrowDown') {
+    e.preventDefault(); e.stopPropagation();
+    ensureLines();
+    if (lines.length === 0) { blindSpeak('No content'); return; }
+    blindLineIndex = Math.min(blindLineIndex + 1, lines.length - 1);
+    if (blindLineIndex < 0) blindLineIndex = 0;
+    blindSpeak(lines[blindLineIndex].text);
+    return;
+  }
+
+  // Up arrow — previous transcript line
+  if (e.key === 'ArrowUp') {
+    e.preventDefault(); e.stopPropagation();
+    ensureLines();
+    if (lines.length === 0) { blindSpeak('No content'); return; }
+    blindLineIndex = Math.max(blindLineIndex - 1, 0);
+    blindSpeak(lines[blindLineIndex].text);
+    return;
+  }
+
+  // H / Shift+H — next/previous heading
+  if (e.key === 'h' || e.key === 'H') {
+    e.preventDefault(); e.stopPropagation();
+    ensureLines();
+    const headings = lines
+      .map((l, i) => ({ l, i }))
+      .filter(({ l }) => l.text.includes('heading level'));
+
+    if (headings.length === 0) { blindSpeak('No headings'); return; }
+
+    if (e.shiftKey) {
+      // Previous heading before current line
+      const prev = [...headings].reverse().find(({ i }) => i < blindLineIndex);
+      if (prev) { blindLineIndex = prev.i; blindSpeak(prev.l.text); }
+      else       { blindSpeak('No previous heading'); }
+    } else {
+      // Next heading after current line
+      const next = headings.find(({ i }) => i > blindLineIndex);
+      if (next) { blindLineIndex = next.i; blindSpeak(next.l.text); }
+      else       { blindSpeak('No next heading'); }
+    }
+    return;
+  }
+
+  // Enter or Space — activate focused element
+  if (e.key === 'Enter' || e.key === ' ') {
+    const doc = frame.contentDocument;
+    // Only intercept if there's an active focused element in the iframe
+    const active = doc && doc.activeElement;
+    if (active && active !== doc.body) {
+      e.preventDefault(); e.stopPropagation();
+      try { active.click(); } catch {}
+      blindSpeak('pressed');
+    }
+    // If nothing is focused yet, fall through so Space doesn't fire
+    return;
+  }
+}
+
+// ── Button ────────────────────────────────────────────────────────────────────
+
+btnBlind.addEventListener('click', () => {
+  if (blindActive) {
+    leaveBlindMode();
+  } else {
+    enterBlindMode();
+  }
+});
+
+// When the page changes while blind mode is active, re-attach listener and
+// rebuild focusables, then announce the new page title
+frame.addEventListener('load', () => {
+  if (!blindActive) return;
+  const doc = frame.contentDocument;
+  if (!doc) return;
+  doc.addEventListener('keydown', blindKeyHandler, { capture: true });
+  blindFocusables = collectFocusables(doc);
+  blindFocusIndex = -1;
+  blindLineIndex  = -1;
+  lines = [];  // will be rebuilt on first navigation
+  // Overlay is already active; keep black screen showing, hide start card
+  blindStartCard.style.display = 'none';
+  const title = doc.title || 'new page';
+  blindSpeak(`Loaded ${title}. Tab to navigate, Down arrow to read.`);
+});
 
 </script>
 </body>
