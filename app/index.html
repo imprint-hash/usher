@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Usher — Screen Reader Simulator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      background: #f3f4f6;
+      color: #1f2328;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      background: #111827;
+      color: #fff;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      padding: 0 1.25rem;
+      gap: 1.5rem;
+      flex-shrink: 0;
+      border-bottom: 1px solid #374151;
+    }
+    .wordmark {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+    .wordmark span { color: #3b82d4; }
+    .topbar label {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-right: 0.25rem;
+    }
+    .page-select {
+      background: #1f2937;
+      color: #f9fafb;
+      border: 1px solid #374151;
+      border-radius: 5px;
+      padding: 0.35rem 0.6rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      min-width: 240px;
+    }
+    .page-select:focus { outline: 2px solid #3b82d4; outline-offset: 2px; }
+
+    /* ── Main layout ── */
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      flex: 1;
+      overflow: hidden;
+      gap: 0;
+    }
+
+    /* ── iframe pane ── */
+    .iframe-pane {
+      position: relative;
+      background: #e5e7eb;
+      overflow: hidden;
+    }
+    #page-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+      background: #fff;
+    }
+
+    /* ── Right panel ── */
+    .right-panel {
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+      border-left: 1px solid #e5e7eb;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 0.75rem 1rem 0.6rem;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+    }
+    .panel-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 0.5rem;
+    }
+    .controls {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .btn {
+      padding: 0.4rem 0.9rem;
+      border-radius: 5px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 0.15s;
+    }
+    .btn-scan {
+      background: #1f2937;
+      color: #fff;
+      border-color: #1f2937;
+    }
+    .btn-scan:hover { background: #111827; }
+    .btn-read {
+      background: #3b82d4;
+      color: #fff;
+      border-color: #3b82d4;
+    }
+    .btn-read:hover { background: #2563eb; }
+    .btn-stop {
+      background: #fff;
+      color: #374151;
+      border-color: #d1d5db;
+    }
+    .btn-stop:hover { background: #f3f4f6; }
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* ── Transcript ── */
+    .transcript {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.5rem 0;
+    }
+    .transcript-empty {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: #9ca3af;
+      font-size: 0.85rem;
+    }
+    .t-line {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      padding: 0.3rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.1s;
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+    .t-line:hover { background: #f3f4f6; }
+    .t-line.active { background: #eff6ff; }
+    .t-line.speaking { background: #dbeafe; }
+    .t-text {
+      flex: 1;
+      color: #1f2328;
+    }
+    .t-tag {
+      flex-shrink: 0;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    .tag-ok    { background: #dcfce7; color: #166534; }
+    .tag-noname { background: #fef9c3; color: #854d0e; }
+    .tag-notbtn { background: #fee2e2; color: #991b1b; }
+    .tag-filename { background: #ffedd5; color: #9a3412; }
+
+    /* ── Disclaimer ── */
+    .disclaimer {
+      padding: 0.6rem 1rem;
+      border-top: 1px solid #e5e7eb;
+      font-size: 0.72rem;
+      color: #9ca3af;
+      line-height: 1.4;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wordmark">Usher<span>.</span></div>
+  <label for="page-select">Page to test:</label>
+  <select id="page-select" class="page-select">
+    <option value="../demo/broken/index.html">Brightwater Goods (broken)</option>
+  </select>
+</div>
+
+<div class="main">
+  <div class="iframe-pane">
+    <iframe id="page-frame" src="../demo/broken/index.html" title="Page under test"></iframe>
+  </div>
+
+  <div class="right-panel">
+    <div class="panel-header">
+      <div class="panel-title">What a screen reader hears</div>
+      <div class="controls">
+        <button class="btn btn-scan" id="btn-scan">Scan page</button>
+        <button class="btn btn-read" id="btn-read" disabled>Read it aloud</button>
+        <button class="btn btn-stop" id="btn-stop" disabled>Stop</button>
+      </div>
+    </div>
+
+    <div class="transcript" id="transcript">
+      <div class="transcript-empty">Load a page and click "Scan page" to see what a screen reader hears.</div>
+    </div>
+
+    <div class="disclaimer">
+      Simulated from the page's accessibility tree. Real screen readers differ in wording.
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { computeAccessibleName } from 'https://cdn.jsdelivr.net/npm/dom-accessibility-api@0.7/+esm';
+
+const frame     = document.getElementById('page-frame');
+const select    = document.getElementById('page-select');
+const btnScan   = document.getElementById('btn-scan');
+const btnRead   = document.getElementById('btn-read');
+const btnStop   = document.getElementById('btn-stop');
+const transcript = document.getElementById('transcript');
+
+let lines = [];          // array of {text, tag, el}
+let speakIndex = -1;
+let utteranceQueue = []; // not used directly; cancel via speechSynthesis
+
+// ── Page select ──────────────────────────────────────────────────────────────
+select.addEventListener('change', () => {
+  frame.src = select.value;
+  clearTranscript();
+});
+
+// ── Scan ─────────────────────────────────────────────────────────────────────
+btnScan.addEventListener('click', () => {
+  const doc = frame.contentDocument;
+  if (!doc) { alert('Cannot access page — is it loaded?'); return; }
+  lines = buildTranscript(doc);
+  renderTranscript();
+  btnRead.disabled = lines.length === 0;
+});
+
+// ── Read aloud ───────────────────────────────────────────────────────────────
+btnRead.addEventListener('click', () => {
+  if (lines.length === 0) return;
+  window.speechSynthesis.cancel();
+  speakIndex = -1;
+  btnRead.disabled = true;
+  btnStop.disabled = false;
+  speakNext();
+});
+
+btnStop.addEventListener('click', () => {
+  window.speechSynthesis.cancel();
+  speakIndex = -1;
+  btnRead.disabled = false;
+  btnStop.disabled = true;
+  clearActiveHighlight();
+  clearIframeOutline();
+});
+
+function speakNext() {
+  speakIndex++;
+  if (speakIndex >= lines.length) {
+    btnRead.disabled = false;
+    btnStop.disabled = true;
+    clearActiveHighlight();
+    clearIframeOutline();
+    return;
+  }
+
+  const line = lines[speakIndex];
+  highlightLine(speakIndex);
+  outlineElement(line.el);
+
+  const u = new SpeechSynthesisUtterance(line.text);
+  u.lang = 'en-US';
+  u.rate = 1.0;
+  // prefer an English voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const enVoice = voices.find(v => v.lang.startsWith('en'));
+  if (enVoice) u.voice = enVoice;
+
+  u.onend = () => speakNext();
+  u.onerror = () => speakNext();
+  window.speechSynthesis.speak(u);
+}
+
+// ── DOM walker ───────────────────────────────────────────────────────────────
+const INTERACTIVE_ROLES = new Set(['button','link','checkbox','radio','combobox',
+  'listbox','menuitem','menuitemcheckbox','menuitemradio','option','slider',
+  'spinbutton','switch','tab','textbox','treeitem']);
+
+function buildTranscript(doc) {
+  const result = [];
+  const walker = doc.createTreeWalker(
+    doc.body,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          return isHidden(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP;
+        }
+        if (node.nodeType === Node.TEXT_NODE) {
+          const parent = node.parentElement;
+          if (!parent || isHidden(parent)) return NodeFilter.FILTER_REJECT;
+          if (shouldSkipForText(parent)) return NodeFilter.FILTER_REJECT;
+          const text = node.textContent.trim();
+          return text ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_SKIP;
+      }
+    }
+  );
+
+  // Use a flat element walk instead, depth-first
+  visitNode(doc.body, result, doc);
+  return result;
+}
+
+function visitNode(root, result, doc) {
+  const iter = doc.createNodeIterator(
+    root,
+    NodeFilter.SHOW_ELEMENT,
+    {
+      acceptNode(node) {
+        if (isHidden(node)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }
+  );
+
+  const seen = new WeakSet();
+
+  let node;
+  while ((node = iter.nextNode())) {
+    if (seen.has(node)) continue;
+
+    const tag = node.tagName.toLowerCase();
+    const role = getEffectiveRole(node);
+
+    // Headings
+    if (/^h[1-6]$/.test(tag)) {
+      const level = tag[1];
+      const name  = getTextContent(node).trim();
+      if (name) {
+        result.push({ text: `${name}, heading level ${level}`, tag: 'ok', el: node });
+        markDescendantsSeen(node, seen);
+      }
+      continue;
+    }
+
+    // Links
+    if (tag === 'a' && node.hasAttribute('href')) {
+      const name = computeAccessibleName(node).trim();
+      if (name) {
+        result.push({ text: `link, ${name}`, tag: 'ok', el: node });
+      } else {
+        result.push({ text: `link`, tag: 'noname', el: node });
+      }
+      markDescendantsSeen(node, seen);
+      continue;
+    }
+
+    // Buttons (real <button> or role="button")
+    if (tag === 'button' || role === 'button') {
+      const name = computeAccessibleName(node).trim();
+      if (name) {
+        result.push({ text: `button, ${name}`, tag: 'ok', el: node });
+      } else {
+        result.push({ text: `button`, tag: 'noname', el: node });
+      }
+      markDescendantsSeen(node, seen);
+      continue;
+    }
+
+    // Images
+    if (tag === 'img') {
+      // aria-hidden or role=presentation/none → skip
+      if (node.getAttribute('aria-hidden') === 'true' ||
+          node.getAttribute('role') === 'presentation' ||
+          node.getAttribute('role') === 'none') continue;
+      // empty alt → decorative, skip
+      if (node.hasAttribute('alt') && node.getAttribute('alt') === '') continue;
+
+      const name = computeAccessibleName(node).trim();
+      if (name) {
+        // Check if name is just the file name derived from URL (no alt attribute)
+        if (!node.hasAttribute('alt')) {
+          const filename = getFilenameFromUrl(node.getAttribute('src') || '');
+          result.push({ text: `image, ${filename}`, tag: 'filename', el: node });
+        } else {
+          result.push({ text: `image, ${name}`, tag: 'ok', el: node });
+        }
+      } else {
+        result.push({ text: `image`, tag: 'noname', el: node });
+      }
+      continue;
+    }
+
+    // Form inputs
+    if (tag === 'input' && node.type !== 'hidden') {
+      const type = (node.getAttribute('type') || 'text').toLowerCase();
+      const name = computeAccessibleName(node).trim();
+      let roleLabel = 'edit text';
+      if (type === 'checkbox') roleLabel = 'checkbox';
+      else if (type === 'radio') roleLabel = 'radio button';
+      else if (type === 'email') roleLabel = 'edit text';
+      else if (type === 'password') roleLabel = 'password edit text';
+      else if (type === 'search') roleLabel = 'search edit text';
+      else if (type === 'submit' || type === 'button' || type === 'reset') roleLabel = 'button';
+
+      if (name) {
+        result.push({ text: `${roleLabel}, ${name}`, tag: 'ok', el: node });
+      } else {
+        // placeholder as fallback label (what AT often does, but unreliable)
+        const ph = node.getAttribute('placeholder');
+        if (ph) {
+          result.push({ text: `${roleLabel}, ${ph}`, tag: 'noname', el: node });
+        } else {
+          result.push({ text: `${roleLabel}`, tag: 'noname', el: node });
+        }
+      }
+      continue;
+    }
+
+    // textarea
+    if (tag === 'textarea') {
+      const name = computeAccessibleName(node).trim();
+      if (name) {
+        result.push({ text: `edit text, ${name}`, tag: 'ok', el: node });
+      } else {
+        result.push({ text: `edit text`, tag: 'noname', el: node });
+      }
+      continue;
+    }
+
+    // select
+    if (tag === 'select') {
+      const name = computeAccessibleName(node).trim();
+      if (name) {
+        result.push({ text: `combo box, ${name}`, tag: 'ok', el: node });
+      } else {
+        result.push({ text: `combo box`, tag: 'noname', el: node });
+      }
+      markDescendantsSeen(node, seen);
+      continue;
+    }
+
+    // Clickable divs / spans — NOT announced as buttons
+    if ((tag === 'div' || tag === 'span') && node.hasAttribute('onclick')) {
+      const text = getTextContent(node).trim();
+      if (text) {
+        result.push({ text, tag: 'notbtn', el: node });
+        markDescendantsSeen(node, seen);
+      }
+      continue;
+    }
+
+    // Plain text blocks (p, li, td, dt, dd, caption, label, legend, blockquote, figcaption, etc.)
+    const TEXT_CONTAINERS = new Set(['p','li','td','th','dt','dd','caption','figcaption',
+      'blockquote','cite','q','legend','label','span','div']);
+    if (TEXT_CONTAINERS.has(tag)) {
+      // Only emit if this node has direct meaningful text (not all just nested elements)
+      const directText = getDirectText(node).trim();
+      if (directText) {
+        result.push({ text: directText, tag: 'ok', el: node });
+      }
+    }
+  }
+
+  return result;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function isHidden(el) {
+  if (el.getAttribute('aria-hidden') === 'true') return true;
+  const style = el.ownerDocument.defaultView.getComputedStyle(el);
+  if (style.display === 'none' || style.visibility === 'hidden') return true;
+  return false;
+}
+
+function shouldSkipForText(el) {
+  const tag = el.tagName.toLowerCase();
+  const skipTags = new Set(['script','style','noscript','svg','head','meta','link']);
+  return skipTags.has(tag);
+}
+
+function getEffectiveRole(el) {
+  const explicit = el.getAttribute('role');
+  if (explicit) return explicit;
+  return null;
+}
+
+function getTextContent(el) {
+  return el.textContent || '';
+}
+
+function getDirectText(el) {
+  let text = '';
+  for (const child of el.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      text += child.textContent;
+    }
+  }
+  return text;
+}
+
+function markDescendantsSeen(node, seen) {
+  const iter = node.ownerDocument.createNodeIterator(node, NodeFilter.SHOW_ELEMENT);
+  let n;
+  while ((n = iter.nextNode())) seen.add(n);
+}
+
+function getFilenameFromUrl(url) {
+  try {
+    const pathname = new URL(url, window.location.href).pathname;
+    const parts = pathname.split('/');
+    return parts[parts.length - 1] || url;
+  } catch {
+    return url;
+  }
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+
+const TAG_CONFIG = {
+  ok:       { label: 'OK',          cls: 'tag-ok' },
+  noname:   { label: 'No name',     cls: 'tag-noname' },
+  notbtn:   { label: 'Not a button',cls: 'tag-notbtn' },
+  filename: { label: 'File name only', cls: 'tag-filename' },
+};
+
+function renderTranscript() {
+  if (lines.length === 0) {
+    transcript.innerHTML = '<div class="transcript-empty">No announcements found.</div>';
+    return;
+  }
+  transcript.innerHTML = '';
+  lines.forEach((line, i) => {
+    const cfg = TAG_CONFIG[line.tag] || TAG_CONFIG.ok;
+    const div = document.createElement('div');
+    div.className = 't-line';
+    div.dataset.index = i;
+    div.innerHTML = `<span class="t-text">${escHtml(line.text)}</span>`
+                  + `<span class="t-tag ${cfg.cls}">${cfg.label}</span>`;
+    div.addEventListener('click', () => activateLine(i));
+    transcript.appendChild(div);
+  });
+}
+
+function clearTranscript() {
+  lines = [];
+  transcript.innerHTML = '<div class="transcript-empty">Load a page and click "Scan page" to see what a screen reader hears.</div>';
+  btnRead.disabled = true;
+  btnStop.disabled = true;
+  clearIframeOutline();
+}
+
+function activateLine(i) {
+  clearActiveHighlight();
+  const el = transcript.querySelector(`[data-index="${i}"]`);
+  if (el) {
+    el.classList.add('active');
+    el.scrollIntoView({ block: 'nearest' });
+  }
+  outlineElement(lines[i].el);
+  scrollIntoIframe(lines[i].el);
+}
+
+function highlightLine(i) {
+  clearActiveHighlight();
+  const el = transcript.querySelector(`[data-index="${i}"]`);
+  if (el) {
+    el.classList.add('speaking');
+    el.scrollIntoView({ block: 'nearest' });
+  }
+  scrollIntoIframe(lines[i].el);
+}
+
+function clearActiveHighlight() {
+  transcript.querySelectorAll('.t-line').forEach(el => {
+    el.classList.remove('active', 'speaking');
+  });
+}
+
+// ── iframe interaction ───────────────────────────────────────────────────────
+
+let lastOutlined = null;
+
+function outlineElement(el) {
+  if (!el) return;
+  if (lastOutlined && lastOutlined !== el) {
+    lastOutlined.style.outline = lastOutlined._usherOldOutline || '';
+    delete lastOutlined._usherOldOutline;
+  }
+  if (el) {
+    el._usherOldOutline = el.style.outline;
+    el.style.outline = '3px solid #3b82d4';
+    lastOutlined = el;
+  }
+}
+
+function clearIframeOutline() {
+  if (lastOutlined) {
+    lastOutlined.style.outline = lastOutlined._usherOldOutline || '';
+    delete lastOutlined._usherOldOutline;
+    lastOutlined = null;
+  }
+}
+
+function scrollIntoIframe(el) {
+  if (!el) return;
+  try {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch {}
+}
+
+function escHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Voices lazy-load ─────────────────────────────────────────────────────────
+// Chrome loads voices asynchronously; pre-warm them.
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.addEventListener('voiceschanged', () => {
+    window.speechSynthesis.getVoices();
+  });
+}
+</script>
+</body>
+</html>

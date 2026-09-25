@@ -1,6 +1,6 @@
 # Brightwater Goods — Accessibility Issues Answer Key
 
-Total deliberate problems: **18**
+Total deliberate problems: **20**
 
 ---
 
@@ -37,47 +37,47 @@ Total deliberate problems: **18**
 ---
 
 ## Issue 5 — Product image 1 (TrailRidge Hiking Boots): missing alt attribute
-**Element:** `<img src="…unsplash…">` (first product card)  
+**Element:** `<img src="…staticflickr…">` (first product card)  
 **What is wrong:** No `alt` attribute. The image is the primary visual representation of the product; without alt text, a screen-reader user has no idea what product they are looking at.  
 **What a screen-reader user hears:** Raw URL string.  
 **WCAG rule:** 1.1.1 Non-text Content (Level A)
 
 ---
 
-## Issue 6 — Product image 2 (Skyward Tent): missing alt attribute
-**Element:** `<img src="…unsplash…">` (second product card)  
+## Issue 6 — Product image 2 (Skyward 4-Person Dome Tent): missing alt attribute
+**Element:** `<img src="…staticflickr…">` (second product card)  
 **What is wrong:** No `alt` attribute.  
 **What a screen-reader user hears:** Raw URL string.  
 **WCAG rule:** 1.1.1 Non-text Content (Level A)
 
 ---
 
-## Issue 7 — Product image 3 (Clearwater Paddle): missing alt attribute
-**Element:** `<img src="…unsplash…">` (third product card)  
+## Issue 7 — Product image 3 (Clearwater Touring Kayak Paddle): missing alt attribute
+**Element:** `<img src="…staticflickr…">` (third product card)  
 **What is wrong:** No `alt` attribute.  
 **What a screen-reader user hears:** Raw URL string.  
 **WCAG rule:** 1.1.1 Non-text Content (Level A)
 
 ---
 
-## Issue 8 — Product image 4 (Climbing Harness): missing alt attribute
-**Element:** `<img src="…unsplash…">` (fourth product card)  
+## Issue 8 — Product image 4 (Summit Daypack 28L): missing alt attribute
+**Element:** `<img src="…staticflickr…">` (fourth product card)  
 **What is wrong:** No `alt` attribute.  
 **What a screen-reader user hears:** Raw URL string.  
 **WCAG rule:** 1.1.1 Non-text Content (Level A)
 
 ---
 
-## Issue 9 — Product image 5 (Insulated Jacket): missing alt attribute
-**Element:** `<img src="…unsplash…">` (fifth product card)  
+## Issue 9 — Product image 5 (Coldfront Down Jacket): missing alt attribute
+**Element:** `<img src="…wikimedia…">` (fifth product card)  
 **What is wrong:** No `alt` attribute.  
 **What a screen-reader user hears:** Raw URL string.  
 **WCAG rule:** 1.1.1 Non-text Content (Level A)
 
 ---
 
-## Issue 10 — Product image 6 (GPS Compass Watch): missing alt attribute
-**Element:** `<img src="…unsplash…">` (sixth product card)  
+## Issue 10 — Product image 6 (Guided Trail Day Pass): missing alt attribute
+**Element:** `<img src="…staticflickr…">` (sixth product card)  
 **What is wrong:** No `alt` attribute.  
 **What a screen-reader user hears:** Raw URL string.  
 **WCAG rule:** 1.1.1 Non-text Content (Level A)
@@ -117,9 +117,9 @@ Total deliberate problems: **18**
 ---
 
 ## Issue 15 — "Pay" button is a `<div>`, not a `<button>`
-**Element:** `<div class="pay-btn-fake" onclick="…">Pay $652.00</div>`  
+**Element:** `<div class="pay-btn-fake" onclick="…">Pay $333.00</div>`  
 **What is wrong:** A `<div>` is not an interactive element. It has no implicit ARIA role of `button`, is not included in the tab order, cannot be activated with Enter or Space, and is not announced by screen readers as a control. The `onclick` attribute only fires for mouse clicks — keyboard users cannot trigger it at all.  
-**What a screen-reader user hears:** "Pay $652.00" read as plain text — not announced as a button. In many screen readers it will be completely skipped when navigating by interactive elements.  
+**What a screen-reader user hears:** "Pay $333.00" read as plain text — not announced as a button. In many screen readers it will be completely skipped when navigating by interactive elements.  
 **WCAG rule:** 4.1.2 Name, Role, Value (Level A); 2.1.1 Keyboard (Level A)
 
 ---
@@ -148,15 +148,15 @@ Total deliberate problems: **18**
 
 ---
 
-## Issue 18b (bonus) — Missing `lang` attribute on `<html>`
-**Element:** `<!DOCTYPE html><head>…` — the `<html>` element has no `lang` attribute  
+## Issue 19 — Missing `lang` attribute on `<html>`
+**Element:** `<html>` — the element has no `lang` attribute  
 **What is wrong:** Without a declared language, screen readers cannot select the correct pronunciation engine or voice. Text-to-speech may mispronounce words using the user's default system language rather than English.  
 **What a screen-reader user hears:** Words may be mispronounced (e.g. English text read with a French or German phonology if that is the system default).  
 **WCAG rule:** 3.1.1 Language of Page (Level A)
 
 ---
 
-## Issue 18c (bonus) — Vague page `<title>`
+## Issue 20 — Vague page `<title>`
 **Element:** `<title>Home</title>`  
 **What is wrong:** "Home" gives no indication of which site the user is on. When multiple browser tabs are open, this title is useless. Screen readers announce the page title on load.  
 **What a screen-reader user hears:** "Home" — no brand name, no context.  
@@ -172,12 +172,12 @@ Total deliberate problems: **18**
 | 2 | Cart button (+ badge) | 4.1.2 Name, Role, Value; 1.3.1 | A |
 | 3 | Account button | 4.1.2 Name, Role, Value | A |
 | 4 | Hero image | 1.1.1 Non-text Content | A |
-| 5 | Product img 1 | 1.1.1 Non-text Content | A |
-| 6 | Product img 2 | 1.1.1 Non-text Content | A |
-| 7 | Product img 3 | 1.1.1 Non-text Content | A |
-| 8 | Product img 4 | 1.1.1 Non-text Content | A |
-| 9 | Product img 5 | 1.1.1 Non-text Content | A |
-| 10 | Product img 6 | 1.1.1 Non-text Content | A |
+| 5 | Product img 1 (TrailRidge Hiking Boots) | 1.1.1 Non-text Content | A |
+| 6 | Product img 2 (Skyward 4-Person Dome Tent) | 1.1.1 Non-text Content | A |
+| 7 | Product img 3 (Clearwater Touring Kayak Paddle) | 1.1.1 Non-text Content | A |
+| 8 | Product img 4 (Summit Daypack 28L) | 1.1.1 Non-text Content | A |
+| 9 | Product img 5 (Coldfront Down Jacket) | 1.1.1 Non-text Content | A |
+| 10 | Product img 6 (Guided Trail Day Pass) | 1.1.1 Non-text Content | A |
 | 11 | Add-to-cart buttons (×6) | 4.1.2 Name, Role, Value | A |
 | 12 | Favourite buttons (×6) | 4.1.2 Name, Role, Value | A |
 | 13 | Email input | 1.3.1; 3.3.2 | A |
@@ -186,5 +186,5 @@ Total deliberate problems: **18**
 | 16 | Colour-only order status | 1.4.1 Use of Color; 4.1.3 | A/AA |
 | 17 | Low-contrast trust text | 1.4.3 Contrast Minimum | AA |
 | 18 | Social icon links (×4) | 4.1.2; 2.4.4 Link Purpose | A |
-| 18b | Missing `<html lang>` | 3.1.1 Language of Page | A |
-| 18c | Vague `<title>` "Home" | 2.4.2 Page Titled | A |
+| 19 | Missing `<html lang>` | 3.1.1 Language of Page | A |
+| 20 | Vague `<title>` "Home" | 2.4.2 Page Titled | A |

@@ -1,10 +1,9 @@
 <!DOCTYPE html>
+<html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Home</title>
-  <!-- MISTAKE 8a: No <html lang> attribute -->
-  <!-- MISTAKE 8b: Vague <title> "Home" -->
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -45,7 +44,6 @@
       gap: 0.5rem;
       align-items: center;
     }
-    /* MISTAKE 1: icon-only buttons with no aria-label and no text */
     .icon-btn {
       background: none;
       border: none;
@@ -89,7 +87,6 @@
       height: 100%;
       object-fit: cover;
       display: block;
-      /* MISTAKE 2a: no alt on hero image – omitted in HTML */
     }
     .hero-overlay {
       position: absolute;
@@ -164,7 +161,6 @@
       object-fit: cover;
       display: block;
       transition: transform 0.3s;
-      /* MISTAKE 2b-2g: product images have no alt – omitted in HTML */
     }
     .product-card:hover .product-img-wrap img { transform: scale(1.04); }
     .product-actions-overlay {
@@ -174,7 +170,6 @@
       display: flex;
       gap: 0.5rem;
     }
-    /* MISTAKE 1 (continued): add-to-cart and favourite icon buttons – no aria-label */
     .product-action-btn {
       width: 38px;
       height: 38px;
@@ -239,7 +234,6 @@
       margin-bottom: 1.5rem;
       color: #111827;
     }
-    /* MISTAKE 3: form fields with only placeholders, no <label> */
     .form-group {
       margin-bottom: 1rem;
     }
@@ -254,8 +248,6 @@
       transition: border-color 0.15s;
     }
     .form-input:focus { border-color: #3b82f6; }
-
-    /* MISTAKE 4: "Pay" button is a <div> with onclick – not a real button, not keyboard-reachable */
     .pay-btn-fake {
       margin-top: 1rem;
       background: #1a4731;
@@ -270,8 +262,6 @@
       transition: background 0.2s;
     }
     .pay-btn-fake:hover { background: #14532d; }
-
-    /* MISTAKE 5: order status shown only by colour */
     .order-status-row {
       display: flex;
       align-items: center;
@@ -288,8 +278,6 @@
     }
     .status-dot.green  { background: #22c55e; }
     .status-dot.red    { background: #ef4444; }
-
-    /* MISTAKE 7: low-contrast grey-on-white text block */
     .low-contrast-block {
       background: #fff;
       border-radius: 12px;
@@ -304,7 +292,7 @@
     }
     .low-contrast-text {
       font-size: 0.9rem;
-      color: #c0c0c0;   /* ≈ 1.6:1 contrast ratio on white – fails WCAG AA */
+      color: #c0c0c0;
       line-height: 1.7;
     }
 
@@ -329,7 +317,6 @@
       font-size: 1.1rem;
     }
     .footer-tagline { font-size: 0.85rem; margin-top: 0.2rem; }
-    /* MISTAKE 6: social icon links with no accessible name */
     .social-links {
       display: flex;
       gap: 0.75rem;
@@ -370,20 +357,17 @@
   <div class="header-inner">
     <a href="#" class="logo">Brightwater<span>.</span></a>
     <nav class="header-actions">
-      <!-- MISTAKE 1: no aria-label, no visible text -->
       <button class="icon-btn">
         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
       </button>
-      <!-- MISTAKE 1: cart button – no aria-label -->
       <button class="icon-btn">
         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/>
         </svg>
         <span class="cart-badge">3</span>
       </button>
-      <!-- MISTAKE 1: account button – no aria-label -->
       <button class="icon-btn">
         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
@@ -397,7 +381,6 @@
      HERO
 ═══════════════════════════════════════════════════ -->
 <section class="hero">
-  <!-- MISTAKE 2a: no alt attribute on hero image -->
   <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1400&q=80">
   <div class="hero-overlay">
     <div class="hero-content">
@@ -418,17 +401,14 @@
     <!-- Product 1 -->
     <div class="product-card">
       <div class="product-img-wrap">
-        <!-- MISTAKE 2b: no alt on product image -->
-        <img src="https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=600&q=80">
+        <img src="https://live.staticflickr.com/3334/3428000910_3f1304babf_b.jpg">
         <div class="product-actions-overlay">
-          <!-- MISTAKE 1: add-to-cart button – no aria-label -->
           <button class="product-action-btn">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
               <path d="M1 1h4l2.68 13.39a2 2 0 001.99 1.61h9.72a2 2 0 001.99-1.61L23 6H6"/>
             </svg>
           </button>
-          <!-- MISTAKE 1: favourite button – no aria-label -->
           <button class="product-action-btn">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z"/>
@@ -446,8 +426,7 @@
     <!-- Product 2 -->
     <div class="product-card">
       <div class="product-img-wrap">
-        <!-- MISTAKE 2c: no alt on product image -->
-        <img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=600&q=80">
+        <img src="https://live.staticflickr.com/3791/9031890963_4db4816d1c_b.jpg">
         <div class="product-actions-overlay">
           <button class="product-action-btn">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -464,7 +443,7 @@
       </div>
       <div class="product-info">
         <span class="product-category">Camping</span>
-        <span class="product-name">Skyward 3-Season Tent</span>
+        <span class="product-name">Skyward 4-Person Dome Tent</span>
         <span class="product-price">$289.00</span>
       </div>
     </div>
@@ -472,8 +451,7 @@
     <!-- Product 3 -->
     <div class="product-card">
       <div class="product-img-wrap">
-        <!-- MISTAKE 2d: no alt on product image -->
-        <img src="https://images.unsplash.com/photo-1520209759809-a9bcb6cb3241?w=600&q=80">
+        <img src="https://live.staticflickr.com/7574/15885266785_1e7568e53f_b.jpg">
         <div class="product-actions-overlay">
           <button class="product-action-btn">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -490,7 +468,7 @@
       </div>
       <div class="product-info">
         <span class="product-category">Paddling</span>
-        <span class="product-name">Clearwater Kayak Paddle</span>
+        <span class="product-name">Clearwater Touring Kayak Paddle</span>
         <span class="product-price">$94.00</span>
       </div>
     </div>
@@ -498,8 +476,7 @@
     <!-- Product 4 -->
     <div class="product-card">
       <div class="product-img-wrap">
-        <!-- MISTAKE 2e: no alt on product image -->
-        <img src="https://images.unsplash.com/photo-1445294211564-3ca59d999abd?w=600&q=80">
+        <img src="https://live.staticflickr.com/97/207756390_b44475411e_b.jpg">
         <div class="product-actions-overlay">
           <button class="product-action-btn">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -515,8 +492,8 @@
         </div>
       </div>
       <div class="product-info">
-        <span class="product-category">Climbing</span>
-        <span class="product-name">Summit Lite Climbing Harness</span>
+        <span class="product-category">Packs</span>
+        <span class="product-name">Summit Daypack 28L</span>
         <span class="product-price">$119.00</span>
       </div>
     </div>
@@ -524,8 +501,7 @@
     <!-- Product 5 -->
     <div class="product-card">
       <div class="product-img-wrap">
-        <!-- MISTAKE 2f: no alt on product image -->
-        <img src="https://images.unsplash.com/photo-1532029837206-abbe2b7620e3?w=600&q=80">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Down_jackets_%2809-09-2022%29.jpg/1024px-Down_jackets_%2809-09-2022%29.jpg">
         <div class="product-actions-overlay">
           <button class="product-action-btn">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -542,7 +518,7 @@
       </div>
       <div class="product-info">
         <span class="product-category">Apparel</span>
-        <span class="product-name">Coldfront Insulated Jacket</span>
+        <span class="product-name">Coldfront Down Jacket</span>
         <span class="product-price">$215.00</span>
       </div>
     </div>
@@ -550,8 +526,7 @@
     <!-- Product 6 -->
     <div class="product-card">
       <div class="product-img-wrap">
-        <!-- MISTAKE 2g: no alt on product image -->
-        <img src="https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=600&q=80">
+        <img src="https://live.staticflickr.com/4411/37000797096_3921f09f37_b.jpg">
         <div class="product-actions-overlay">
           <button class="product-action-btn">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -567,9 +542,9 @@
         </div>
       </div>
       <div class="product-info">
-        <span class="product-category">Navigation</span>
-        <span class="product-name">WildPath GPS Compass Watch</span>
-        <span class="product-price">$349.00</span>
+        <span class="product-category">Experiences</span>
+        <span class="product-name">Guided Trail Day Pass</span>
+        <span class="product-price">$65.00</span>
       </div>
     </div>
 
@@ -585,7 +560,6 @@
   <div class="checkout-card">
     <h2>Quick Checkout</h2>
 
-    <!-- MISTAKE 3: inputs have placeholder only, no <label> -->
     <div class="form-group">
       <input class="form-input" type="email" placeholder="Email address">
     </div>
@@ -601,12 +575,10 @@
       </div>
     </div>
 
-    <!-- MISTAKE 4: Pay button is a <div>, not a <button> – not keyboard focusable -->
     <div class="pay-btn-fake" onclick="document.getElementById('order-dot').className='status-dot green'">
-      Pay $652.00
+      Pay $333.00
     </div>
 
-    <!-- MISTAKE 5: order status shown only by colour, no text explanation -->
     <div class="order-status-row">
       <div id="order-dot" class="status-dot red"></div>
       Order status
@@ -614,7 +586,6 @@
   </div>
 
   <!-- Low-contrast trust block -->
-  <!-- MISTAKE 7: very light grey text on white background (~1.6:1 ratio) -->
   <div class="low-contrast-block">
     <h3>Why shop with us?</h3>
     <p class="low-contrast-text">
@@ -637,9 +608,8 @@
     <div>
       <div class="footer-brand">Brightwater Goods</div>
       <div class="footer-tagline">Outfitting adventures since 2011.</div>
-      <div class="footer-copy">© 2025 Brightwater Goods LLC. All rights reserved.</div>
+      <div class="footer-copy">© 2026 Brightwater Goods LLC. All rights reserved.</div>
     </div>
-    <!-- MISTAKE 6: social links have no text and no aria-label -->
     <div class="social-links">
       <!-- Instagram -->
       <a href="#" class="social-link">
