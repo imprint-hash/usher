@@ -1,6 +1,8 @@
 # Accessibility Fixes
 
-Fixed: 32  |  Needs a human: 7  |  Still not fixed: 0
+Fixed: 34  |  Needs a human: 7  |  Still not fixed: 0
+
+> **Second pass:** An independent axe-core check found 2 contrast problems the first pass missed; both fixed in a second pass.
 
 ---
 
@@ -264,6 +266,26 @@ Note: for product images it is acceptable to mark them `alt=""` if a screen read
 
 ---
 
+## Fix 37 — "Shop now" button below 4.5:1 contrast
+
+**Element:** `<a class="btn-primary">Shop now</a>` in the hero section
+**Before:** White `#ffffff` text on blue `#3b82f6` background — contrast ratio ≈ 3.75:1, below the 4.5:1 minimum for normal-weight text
+**After:** Background darkened to `#1d4ed8`; hover state updated to `#1e40af` — contrast ratio ≈ **6.90:1**
+**Why:** A low-vision user reading the hero call-to-action could not reliably distinguish the text from the button background. The fix uses a darker shade of the same brand blue so the button still looks like a primary action; no layout or sizing changes were made.
+**WCAG:** 1.4.3 Contrast (Minimum) (Level AA)
+
+---
+
+## Fix 38 — Footer copyright line below 4.5:1 contrast
+
+**Element:** `<div class="footer-copy">` — the "© 2026 Brightwater Goods LLC" line in the footer
+**Before:** Text colour `#6b7280` on dark footer background `#111827` — contrast ratio ≈ 3.63:1, below 4.5:1
+**After:** Colour changed to `#9ca3af` — contrast ratio ≈ **7.06:1**. This is the same grey already used for the footer's base `color` and the social-link icons, so the change is invisible to sighted users who already perceived the footer as a unified dark block of text.
+**Why:** The copyright line was too dim to read reliably against the near-black footer. Lightening it to match the surrounding footer text puts it well above the threshold with no visual redesign.
+**WCAG:** 1.4.3 Contrast (Minimum) (Level AA)
+
+---
+
 ## Still not fixed
 
-Nothing remains unfixed. All 36 identified issues have been resolved or, in the case of images, safely stubbed with `alt=""` and flagged for a content owner.
+Nothing remains unfixed. All 38 identified issues have been resolved or, in the case of images, safely stubbed with `alt=""` and flagged for a content owner.
