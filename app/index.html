@@ -136,6 +136,40 @@
     #btn-morph:hover { background: #6d28d9; }
     #btn-morph.visible { display: block; }
 
+    /* ── Copy for Bob / Download .md buttons ── */
+    #btn-copy-bob, #btn-download-md {
+      background: #065f46;
+      color: #d1fae5;
+      border: 1px solid #047857;
+      border-radius: 5px;
+      padding: 0.35rem 0.9rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+      display: none;
+    }
+    #btn-copy-bob:hover, #btn-download-md:hover { background: #047857; }
+    #btn-copy-bob.visible, #btn-download-md.visible { display: inline-block; }
+    #copy-bob-toast {
+      position: fixed;
+      bottom: 1.2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #065f46;
+      color: #d1fae5;
+      border: 1px solid #047857;
+      border-radius: 6px;
+      padding: 0.5rem 1.2rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      z-index: 9999999;
+      display: none;
+      white-space: nowrap;
+    }
+    #copy-bob-toast.visible { display: block; }
+
     /* ── Try it blind button ── */
     #btn-blind {
       margin-left: auto;
@@ -367,6 +401,7 @@
     /* NEW problem tags — count as issues */
     .tag-unclear  { background: #fde68a; color: #78350f; }
     .tag-colouronly { background: #e0e7ff; color: #3730a3; }
+    .tag-mouseonly { background: #fce7f3; color: #9d174d; }
 
     /* ── Disclaimer ── */
     .disclaimer {
@@ -411,6 +446,7 @@
   <select id="page-select" class="page-select">
     <option value="../demo/broken/index.html">Brightwater Goods (broken)</option>
     <option value="../demo/fixed/index.html">Brightwater Goods (fixed by Bob)</option>
+    <option value="../demo/real/freelancer/index.html">Freelancer template (real, MIT)</option>
   </select>
   <span id="usher-counter"></span>
   <span id="axe-score" tabindex="0" aria-haspopup="true">
@@ -418,6 +454,8 @@
     <ul id="axe-breakdown" role="list" aria-label="axe-core rule breakdown"></ul>
   </span>
   <button id="btn-morph">Show Bob's fix</button>
+  <button id="btn-copy-bob" title="Copy Markdown report for Bob">Copy for Bob</button>
+  <button id="btn-download-md" title="Download Markdown report as .md file">Download .md</button>
   <button id="btn-blind">Try it blind</button>
   <button class="btn-lights" id="btn-lights">Turn off the lights</button>
 </div>
@@ -442,6 +480,8 @@
 </div>
 <!-- Caption layer (white text on black, replaces entire screen while navigating) -->
 <div id="blind-caption" aria-live="assertive" aria-atomic="true"></div>
+<!-- Copy-for-Bob toast notification -->
+<div id="copy-bob-toast" role="status" aria-live="polite"></div>
 
 <div class="main">
   <div class="iframe-pane">
@@ -478,6 +518,9 @@ const btnRead    = document.getElementById('btn-read');
 const btnStop    = document.getElementById('btn-stop');
 const btnLights  = document.getElementById('btn-lights');
 const btnMorph   = document.getElementById('btn-morph');
+const btnCopyBob = document.getElementById('btn-copy-bob');
+const btnDownloadMd = document.getElementById('btn-download-md');
+const copyBobToast  = document.getElementById('copy-bob-toast');
 const transcript = document.getElementById('transcript');
 const usherCounter = document.getElementById('usher-counter');
 const axeScore   = document.getElementById('axe-score');
@@ -487,19 +530,39 @@ const axeBreakdown = document.getElementById('axe-breakdown');
 let lines = [];      // array of {text, tag, el}
 let speakIndex = -1;
 let morphInProgress = false;
+let lastAxeResult = null; // saved for the "Copy for Bob" report
 
-const BROKEN_URL = '../demo/broken/index.html';
-const FIXED_URL  = '../demo/fixed/index.html';
+// Fixed-version map: for each page URL, the URL of its fixed copy
+const FIXED_MAP = {
+  '../demo/broken/index.html':              '../demo/fixed/index.html',
+  '../demo/real/freelancer/index.html':     '../demo/real/freelancer/index.fixed.html',
+};
 
-function isBrokenPage() {
-  return select.value === BROKEN_URL;
+/** Return the fixed URL for the current page, or null if none configured. */
+function fixedUrlForCurrent() {
+  return FIXED_MAP[select.value] || null;
 }
+
+// ── Conditionally add "Freelancer (fixed by Bob)" dropdown option ─────────────
+(async () => {
+  const fixedPath = '../demo/real/freelancer/index.fixed.html';
+  try {
+    const res = await fetch(fixedPath, { method: 'HEAD' });
+    if (res.ok) {
+      const opt = document.createElement('option');
+      opt.value = fixedPath;
+      opt.textContent = 'Freelancer (fixed by Bob)';
+      select.appendChild(opt);
+    }
+  } catch { /* file doesn't exist or fetch blocked — just skip */ }
+})();
 
 // ── Page select ──────────────────────────────────────────────────────────────
 select.addEventListener('change', () => {
   frame.src = select.value;
   clearTranscript();
   hideMorphButton();
+  hideCopyBobButtons();
   // If blind mode is active, the frame load handler will re-attach listeners
   // and keep the mode on — nothing else needed here.
 });
@@ -511,6 +574,7 @@ btnScan.addEventListener('click', () => {
   lines = buildTranscript(doc);
   renderTranscript();
   btnRead.disabled = lines.length === 0;
+  showCopyBobButtons();
 });
 
 // ── Read aloud ───────────────────────────────────────────────────────────────
@@ -615,10 +679,16 @@ function visitNode(root, result, doc) {
       const name = computeAccessibleName(node).trim();
       if (!name) {
         result.push({ text: `link`, tag: 'noname', el: node });
-      } else if (isUnclearName(name)) {
-        result.push({ text: `${name}, link`, tag: 'unclear', el: node });
       } else {
-        result.push({ text: `${name}, link`, tag: 'ok', el: node });
+        const spoken = punctuationSpokenForm(name);
+        if (spoken !== null) {
+          // Punctuation-only name: show how it sounds + tag Unclear name
+          result.push({ text: `${spoken}, link`, tag: 'unclear', el: node });
+        } else if (isUnclearName(name)) {
+          result.push({ text: `${name}, link`, tag: 'unclear', el: node });
+        } else {
+          result.push({ text: `${name}, link`, tag: 'ok', el: node });
+        }
       }
       markDescendantsSeen(node, seen);
       continue;
@@ -629,10 +699,15 @@ function visitNode(root, result, doc) {
       const name = computeAccessibleName(node).trim();
       if (!name) {
         result.push({ text: `button`, tag: 'noname', el: node });
-      } else if (isUnclearName(name)) {
-        result.push({ text: `${name}, button`, tag: 'unclear', el: node });
       } else {
-        result.push({ text: `${name}, button`, tag: 'ok', el: node });
+        const spoken = punctuationSpokenForm(name);
+        if (spoken !== null) {
+          result.push({ text: `${spoken}, button`, tag: 'unclear', el: node });
+        } else if (isUnclearName(name)) {
+          result.push({ text: `${name}, button`, tag: 'unclear', el: node });
+        } else {
+          result.push({ text: `${name}, button`, tag: 'ok', el: node });
+        }
       }
       markDescendantsSeen(node, seen);
       continue;
@@ -647,9 +722,13 @@ function visitNode(root, result, doc) {
 
       const name = computeAccessibleName(node).trim();
       if (name) {
+        const spoken = punctuationSpokenForm(name);
         if (!node.hasAttribute('alt')) {
           const filename = getFilenameFromUrl(node.getAttribute('src') || '');
           result.push({ text: `${filename}, image`, tag: 'filename', el: node });
+        } else if (spoken !== null) {
+          // alt="..." or alt="*" etc. — sounds like "dot dot dot, image"
+          result.push({ text: `${spoken}, image`, tag: 'unclear', el: node });
         } else {
           result.push({ text: `${name}, image`, tag: 'ok', el: node });
         }
@@ -707,13 +786,18 @@ function visitNode(root, result, doc) {
       continue;
     }
 
-    // Clickable divs / spans — NOT announced as buttons
-    if ((tag === 'div' || tag === 'span') && node.hasAttribute('onclick')) {
-      const text = getTextContent(node).trim();
-      if (text) {
-        result.push({ text, tag: 'notbtn', el: node });
-        markDescendantsSeen(node, seen);
-      }
+    // ── Mouse-only / Not-a-button detection ──────────────────────────────────
+    // An element counts when:
+    //  • it is not a/button/input/select/textarea/summary
+    //  • has no interactive role
+    //  • is not focusable (tabindex >= 0)
+    //  AND any of:
+    //  • has onclick attribute
+    //  • has data-bs-toggle / data-toggle / data-bs-target
+    //  • computed cursor is "pointer" AND not inside a real a/button
+    if (isMouseOnlyControl(node, doc)) {
+      result.push({ text: '(nothing — cannot be reached without a mouse)', tag: 'mouseonly', el: node });
+      markDescendantsSeen(node, seen);
       continue;
     }
 
@@ -789,6 +873,41 @@ function getFilenameFromUrl(url) {
   }
 }
 
+/**
+ * Translate a punctuation-only string into how a screen reader says it.
+ * e.g. "..." -> "dot dot dot"   "..." -> "dot dot dot"
+ * Returns null if the name contains real word characters.
+ */
+function punctuationSpokenForm(name) {
+  // Map of individual characters to their spoken form
+  const MAP = {
+    '.': 'dot',    '…': 'dot dot dot',
+    ',': 'comma',  ':': 'colon',    ';': 'semicolon',
+    '!': 'exclamation mark', '?': 'question mark',
+    '"': 'quote', "'": 'apostrophe', '\u2018': 'quote', '\u2019': 'apostrophe',
+    '\u201c': 'quote', '\u201d': 'quote',
+    '-': 'dash', '\u2013': 'en dash', '\u2014': 'em dash',
+    '/': 'slash', '\\': 'backslash',
+    '|': 'bar', '_': 'underscore', '@': 'at',
+    '#': 'hash', '$': 'dollar', '%': 'percent',
+    '^': 'caret', '&': 'ampersand', '*': 'asterisk',
+    '(': 'open paren', ')': 'close paren',
+    '[': 'open bracket', ']': 'close bracket',
+    '{': 'open brace', '}': 'close brace',
+    '<': 'less than', '>': 'greater than',
+    '+': 'plus', '=': 'equals', '~': 'tilde', '`': 'backtick',
+  };
+  const parts = [];
+  for (const ch of name) {
+    if (/\s/.test(ch)) continue;
+    if (/\w/.test(ch)) return null; // contains a real word character — not punctuation-only
+    const spoken = MAP[ch];
+    if (spoken) parts.push(spoken);
+    // unknown punctuation: skip silently
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
 function isUnclearName(name) {
   return /^[\d\s\W]+$/.test(name) && name.trim().length > 0;
 }
@@ -843,6 +962,59 @@ function isColourOnlyElement(el, doc) {
   return true;
 }
 
+/**
+ * Returns true if the element acts as a clickable control but is not reachable
+ * or announced as a control by assistive technology.
+ *
+ * Conditions:
+ *  1. Not a native interactive element (a[href], button, input, select, textarea, summary)
+ *  2. No interactive ARIA role
+ *  3. Not focusable (no tabindex >= 0)
+ *  AND at least one of:
+ *  A. Has an onclick attribute
+ *  B. Has data-bs-toggle or data-toggle or data-bs-target attribute
+ *  C. Computed cursor is "pointer" AND not a descendant of a real a/button
+ */
+function isMouseOnlyControl(el, doc) {
+  const tag = el.tagName.toLowerCase();
+  // Must not be a native interactive element
+  const NATIVE = new Set(['button','input','select','textarea','summary']);
+  if (NATIVE.has(tag)) return false;
+  if (tag === 'a' && el.hasAttribute('href')) return false;
+
+  // Must not have an interactive role
+  if (INTERACTIVE_ROLES.has(getEffectiveRole(el))) return false;
+
+  // Must not be explicitly focusable
+  const ti = el.getAttribute('tabindex');
+  if (ti !== null && parseInt(ti, 10) >= 0) return false;
+
+  // Check trigger conditions
+  const hasOnclick    = el.hasAttribute('onclick');
+  const hasBsToggle   = el.hasAttribute('data-bs-toggle') || el.hasAttribute('data-toggle');
+  const hasBsTarget   = el.hasAttribute('data-bs-target');
+
+  let hasPointerCursor = false;
+  if (!hasOnclick && !hasBsToggle && !hasBsTarget) {
+    // Only check cursor as fallback, and only if not inside a real a/button
+    let anc = el.parentElement;
+    let insideNative = false;
+    while (anc) {
+      const at = anc.tagName.toLowerCase();
+      if (at === 'button' || (at === 'a' && anc.hasAttribute('href'))) { insideNative = true; break; }
+      anc = anc.parentElement;
+    }
+    if (!insideNative) {
+      try {
+        const style = doc.defaultView.getComputedStyle(el);
+        hasPointerCursor = style.cursor === 'pointer';
+      } catch {}
+    }
+  }
+
+  return hasOnclick || hasBsToggle || hasBsTarget || hasPointerCursor;
+}
+
 // ── Render ───────────────────────────────────────────────────────────────────
 
 const TAG_CONFIG = {
@@ -852,9 +1024,10 @@ const TAG_CONFIG = {
   filename:   { label: 'File name only',  cls: 'tag-filename' },
   unclear:    { label: 'Unclear name',    cls: 'tag-unclear' },
   colouronly: { label: 'Colour only',     cls: 'tag-colouronly' },
+  mouseonly:  { label: 'Mouse only',      cls: 'tag-mouseonly' },
 };
 
-const PROBLEM_TAGS = new Set(['noname','notbtn','filename','unclear','colouronly']);
+const PROBLEM_TAGS = new Set(['noname','notbtn','filename','unclear','colouronly','mouseonly']);
 
 function renderTranscript() {
   if (lines.length === 0) {
@@ -879,6 +1052,7 @@ function renderTranscript() {
 
 function clearTranscript() {
   lines = [];
+  lastAxeResult = null;
   transcript.innerHTML = '<div class="transcript-empty">Load a page and click "Scan page" to see what a screen reader hears.</div>';
   btnRead.disabled = true;
   btnStop.disabled = true;
@@ -886,6 +1060,7 @@ function clearTranscript() {
   usherCounter.textContent = '';
   usherCounter.classList.remove('visible');
   hideAxeScore();
+  hideCopyBobButtons();
 }
 
 function activateLine(i) {
@@ -980,8 +1155,8 @@ btnLights.addEventListener('click', () => {
     btnLights.textContent = 'Turn the lights back on';
     btnLights.classList.add('lights-off');
     collapse(doc, lines);
-    // Show "Show Bob's fix" only on the broken page
-    if (isBrokenPage()) showMorphButton();
+    // Show "Show Bob's fix" if this page has a fixed version
+    if (fixedUrlForCurrent()) showMorphButton();
   } else {
     collapseActive = false;
     btnLights.textContent = 'Turn off the lights';
@@ -993,6 +1168,14 @@ btnLights.addEventListener('click', () => {
 
 function showMorphButton() { btnMorph.classList.add('visible'); }
 function hideMorphButton()  { btnMorph.classList.remove('visible'); }
+function showCopyBobButtons() {
+  btnCopyBob.classList.add('visible');
+  btnDownloadMd.classList.add('visible');
+}
+function hideCopyBobButtons() {
+  btnCopyBob.classList.remove('visible');
+  btnDownloadMd.classList.remove('visible');
+}
 
 function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1196,7 +1379,7 @@ function drawBoxes(doc, transcriptLines, container, problemCount, total, reduced
       // simply invisible until the user scrolls them into view.
 
       const isBroken = isProblemLine(line);
-      const isNothing = (line.tag === 'notbtn');
+      const isNothing = (line.tag === 'notbtn' || line.tag === 'mouseonly');
 
       const box = doc.createElement('div');
       box.dataset.usherIndex = i;
@@ -1217,7 +1400,8 @@ function drawBoxes(doc, transcriptLines, container, problemCount, total, reduced
         box-sizing: border-box;
       `;
 
-      const labelText = isNothing ? '(nothing — not a button)'
+      const labelText = line.tag === 'mouseonly' ? '(mouse only)'
+        : line.tag === 'notbtn'  ? '(nothing — not a button)'
         : isBroken ? boxLabelForLine(line)
         : line.text;
 
@@ -1707,13 +1891,20 @@ function _execAxe(axe, iframeDoc, resolve, reject) {
     { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } },
     (err, results) => {
       if (err) { reject(err); return; }
-      const rules = (results.violations || []).map(v => ({
+      // Keep full violation data for "Copy for Bob" report
+      const violations = (results.violations || []).map(v => ({
         id: v.id,
+        impact: v.impact,
         description: v.help || v.id,
-        nodes: v.nodes.length,
+        nodes: v.nodes.map(n => ({
+          count: 1,
+          target: (n.target || []).join(', '),
+          html: (n.html || '').slice(0, 200),
+        })),
       }));
+      const rules = violations.map(v => ({ id: v.id, description: v.description, nodes: v.nodes.length }));
       const nodeCount = rules.reduce((s, r) => s + r.nodes, 0);
-      resolve({ nodeCount, rules });
+      resolve({ nodeCount, rules, violations });
     }
   );
 }
@@ -1777,11 +1968,14 @@ function onPageReady() {
     lines = buildTranscript(doc);
     renderTranscript();
     btnRead.disabled = lines.length === 0;
+    showCopyBobButtons();
   }
 
   runAxe(doc).then(result => {
+    lastAxeResult = result;
     showAxeScore(result);
   }).catch(() => {
+    lastAxeResult = null;
     hideAxeScore();
   });
 }
@@ -1798,19 +1992,115 @@ document.getElementById('hint-close').addEventListener('click', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// ── COPY FOR BOB / DOWNLOAD .md ─────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Build a Markdown Usher report for the current scan.
+ * Includes:
+ *  - Title and page path
+ *  - Every transcript problem line (tag, spoken text, trimmed outerHTML)
+ *  - Every axe-core violation (id, impact, help, nodes)
+ *  - Totals and a closing instruction for the Usher Fixer
+ */
+function buildUsherMarkdown() {
+  const pageName = select.options[select.selectedIndex]?.text || 'Unknown page';
+  const pageUrl  = select.value;
+  const problems = lines.filter(l => isProblemLine(l));
+  const totalLines = lines.length;
+  const problemCount = problems.length;
+
+  let md = `# Usher report: ${pageName}\n\n`;
+  md += `**Page:** \`${pageUrl}\`\n\n`;
+  md += `---\n\n`;
+
+  md += `## Transcript problems (${problemCount} of ${totalLines} items)\n\n`;
+  if (problems.length === 0) {
+    md += `_No transcript problems found._\n\n`;
+  } else {
+    problems.forEach(line => {
+      const tagLabel = TAG_CONFIG[line.tag]?.label || line.tag;
+      const html = line.el ? (line.el.outerHTML || '').replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+      md += `### [${tagLabel}] "${line.text}"\n\n`;
+      if (html) md += `\`\`\`html\n${html}\n\`\`\`\n\n`;
+    });
+  }
+
+  md += `---\n\n`;
+  md += `## axe-core violations\n\n`;
+  const axe = lastAxeResult;
+  if (!axe || axe.nodeCount === 0) {
+    md += `_No WCAG 2.1 A/AA violations detected by axe-core._\n\n`;
+  } else {
+    (axe.violations || []).forEach(v => {
+      md += `### [${v.id}] ${v.description} _(impact: ${v.impact || 'unknown'})_\n\n`;
+      v.nodes.forEach(n => {
+        md += `- **Target:** \`${n.target}\`\n`;
+        if (n.html) md += `  \`\`\`html\n  ${n.html}\n  \`\`\`\n`;
+      });
+      md += `\n`;
+    });
+  }
+
+  md += `---\n\n`;
+  md += `## Totals\n\n`;
+  md += `- Transcript problems: **${problemCount}** of ${totalLines}\n`;
+  md += `- axe-core violations: **${axe ? axe.nodeCount : 0}** nodes across **${axe?.violations?.length || 0}** rules\n\n`;
+  md += `---\n\n`;
+  md += `Fix these in a copy of this page following your rules, then write the FIXES report.\n`;
+
+  return md;
+}
+
+let _copyToastTimer = null;
+function showCopyToast(msg) {
+  copyBobToast.textContent = msg;
+  copyBobToast.classList.add('visible');
+  if (_copyToastTimer) clearTimeout(_copyToastTimer);
+  _copyToastTimer = setTimeout(() => copyBobToast.classList.remove('visible'), 4000);
+}
+
+btnCopyBob.addEventListener('click', async () => {
+  if (lines.length === 0) return;
+  const md = buildUsherMarkdown();
+  try {
+    await navigator.clipboard.writeText(md);
+    showCopyToast('Copied — paste it into Bob in 🔦 Usher Fixer mode');
+  } catch {
+    showCopyToast('Clipboard unavailable — use Download .md instead');
+  }
+});
+
+btnDownloadMd.addEventListener('click', () => {
+  if (lines.length === 0) return;
+  const md = buildUsherMarkdown();
+  const pageName = select.options[select.selectedIndex]?.text || 'usher-report';
+  const safeName = pageName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `usher-report-${safeName}.md`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 // ── MORPH (Show Bob's fix) ───────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 
 btnMorph.addEventListener('click', () => {
   if (!collapseActive || morphInProgress) return;
+  const fixedUrl = fixedUrlForCurrent();
+  if (!fixedUrl) return;
   morphInProgress = true;
   hideMorphButton();
 
-  const beforeTranscript = lines.slice(); // snapshot of broken page transcript
+  const beforeTranscript = lines.slice(); // snapshot of current page transcript
 
   // Load the fixed page into the iframe
-  frame.src = FIXED_URL;
-  select.value = FIXED_URL;
+  frame.src = fixedUrl;
+  select.value = fixedUrl;
 
   frame.addEventListener('load', function onFixedLoad() {
     frame.removeEventListener('load', onFixedLoad);
