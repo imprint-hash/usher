@@ -3,49 +3,95 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Usher</title>
+  <title>Usher — your app, in the dark</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%230b0b0c'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23ffb347' opacity='0.95'/%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%23ffb347' stroke-width='1.5' opacity='0.35'/%3E%3Ccircle cx='16' cy='16' r='14' fill='none' stroke='%23ffb347' stroke-width='0.8' opacity='0.18'/%3E%3C/svg%3E">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
-      background: #0f0f0f;
-      color: #f0f0f0;
+      background: #0b0b0c;
+      color: #e2e8f0;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 1.5rem;
+      gap: 1.25rem;
+      padding: 2rem 1.5rem;
+      text-align: center;
     }
-    h1 {
+    .wordmark {
       font-size: 4rem;
-      font-weight: 700;
-      letter-spacing: -0.03em;
+      font-weight: 800;
+      letter-spacing: -0.04em;
       color: #ffffff;
+      line-height: 1;
     }
-    p {
-      font-size: 1.25rem;
-      color: #888;
-      letter-spacing: 0.02em;
+    .wordmark span { color: #ffb347; }
+    .tagline {
+      font-size: 1.35rem;
+      color: #94a3b8;
+      letter-spacing: 0.01em;
+      margin-top: -0.25rem;
     }
-    a {
-      margin-top: 1rem;
+    .description {
+      font-size: 1rem;
+      color: #64748b;
+      max-width: 520px;
+      line-height: 1.65;
+    }
+    .btn-open {
       display: inline-block;
-      padding: 0.75rem 2rem;
+      margin-top: 0.5rem;
+      padding: 0.85rem 2.5rem;
       background: #3b82f6;
       color: #fff;
       text-decoration: none;
-      border-radius: 6px;
-      font-size: 1rem;
-      font-weight: 500;
-      transition: background 0.2s;
+      border-radius: 7px;
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      transition: background 0.18s;
     }
-    a:hover { background: #2563eb; }
+    .btn-open:hover { background: #2563eb; }
+    .small-links {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 0.25rem;
+    }
+    .small-links a {
+      font-size: 0.85rem;
+      color: #475569;
+      text-decoration: none;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .small-links a:hover { color: #94a3b8; border-color: #64748b; }
+    .glow {
+      width: 260px;
+      height: 260px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,179,71,0.12) 0%, transparent 70%);
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    body > * { position: relative; z-index: 1; }
   </style>
 </head>
 <body>
-  <h1>Usher</h1>
-  <p>Your app, in the dark.</p>
-  <a href="demo/broken/index.html">Open demo shop &rarr;</a>
+  <div class="glow" aria-hidden="true"></div>
+  <div class="wordmark">Usher<span>.</span></div>
+  <p class="tagline">Your app, in the dark.</p>
+  <p class="description">See and hear your web page the way a blind user does, then let IBM Bob fix it — and check the fix with an independent tool.</p>
+  <a href="app/" class="btn-open">Open Usher &rarr;</a>
+  <div class="small-links">
+    <a href="https://github.com/imprint-hash/usher" target="_blank" rel="noopener">GitHub repo</a>
+    <a href="https://github.com/imprint-hash/usher/blob/main/demo/fixed/FIXES.md" target="_blank" rel="noopener">Fix report</a>
+  </div>
 </body>
 </html>

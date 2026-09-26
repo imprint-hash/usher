@@ -1,0 +1,135 @@
+# TASK 9b for Usher: fix a race condition in app/index.html.
+
+The module script imports dom-accessibility-api from jsdelivr, so it runs only after that download. The iframe loads the local demo page faster, so its 'load' event has usually already fired before frame.addEventListener('load', ...) is attached (around line 1763). Result: on first open, the auto-scan never runs and the axe score never appears.
+
+Fix: move the body of that load handler into a named function, e.g. onPageReady(). Attach it as the load listener as now, AND immediately after attaching it, check whether the iframe has already loaded (frame.contentDocument && frame.contentDocument.readyState === 'complete' && frame.contentDocument.location.href !== 'about:blank') and, if so, call onPageReady() straight away. Make sure it cannot run twice for the same load.
+
+Check the other two frame 'load' listeners (around lines 1803 and 2615) for the same problem and apply the same pattern if needed.
+
+Then confirm: opening app/ fresh shows the transcript filled and the axe score ("29 problems") without clicking anything.
+
+---
+
+**Status:** active  **Date:** 2026-09-25
+
+---
+
+### 👤 User
+
+TASK 9b for Usher: fix a race condition in app/index.html.
+
+The module script imports dom-accessibility-api from jsdelivr, so it runs only after that download. The iframe loads the local demo page faster, so its 'load' event has usually already fired before frame.addEventListener('load', ...) is attached (around line 1763). Result: on first open, the auto-scan never runs and the axe score never appears.
+
+Fix: move the body of that load handler into a named function, e.g. onPageReady(). Attach it as the load listener as now, AND immediately after attaching it, check whether the iframe has already loaded (frame.contentDocument && frame.contentDocument.readyState === 'complete' && frame.contentDocument.location.href !== 'about:blank') and, if so, call onPageReady() straight away. Make sure it cannot run twice for the same load.
+
+Check the other two frame 'load' listeners (around lines 1803 and 2615) for the same problem and apply the same pattern if needed.
+
+Then confirm: opening app/ fresh shows the transcript filled and the axe score ("29 problems") without clicking anything.
+
+---
+
+### 🤖 Assistant
+
+> 🔧 called: read_file
+
+Let me start by reading the relevant sections of the file.
+
+> 🔧 **read_file** — app/index.html
+
+### 🤖 Assistant
+
+> 🔧 called: read_file
+
+
+
+> 🔧 **read_file** — app/index.html
+
+### 🤖 Assistant
+
+> 🔧 called: read_file
+
+Now let me read a bit more context around line 1763 to understand variable declarations:
+
+> 🔧 **read_file** — app/index.html
+
+### 🤖 Assistant
+
+> 🔧 called: apply_diff
+
+Now I have a clear picture of all three listeners. Let me analyze each:
+
+1. **Line 1763** — The primary `load` listener for auto-scan + axe. This suffers from the race condition. Needs the `onPageReady()` pattern with immediate-call check.
+
+2. **Line 1803** — `onFixedLoad` inside `btnMorph` click handler. This is only attached *after* `frame.src = FIXED_URL` is set (inside a click handler), so by the time JS runs the `.addEventListener`, the fixed URL hasn't loaded yet. No race condition here.
+
+3. **Line 2615** — Blind mode `load` listener. This is attached at startup, but it only acts when `blindActive` is true. The user can't enter blind mode before the page loads on first open (the button needs a click), so there's no practical race here on first load. However, strictly speaking the same pattern *could* apply if the page loads fast — but the guard `if (!blindActive) return` means it's harmless. Let me check if there's truly a race risk worth fixing here.
+
+The blind mode listener was added at startup and early-exits if `!blindActive`. Since `blindActive` starts `false`, and needs a button click to become `true`, there's no race on first load. Skip that one.
+
+Now let me apply the fix to the primary listener (line 1763):
+
+> 🔧 **apply_diff** — app/index.html
+
+### 🤖 Assistant
+
+> 🔧 called: read_file
+
+Now let me verify the result looks correct around the edited area:
+
+> 🔧 **read_file** — app/index.html
+
+### 🤖 Assistant
+
+> 🔧 called: read_file
+
+The fix is clean. Let me also verify the morph listener hasn't changed (still fine as-is):
+
+> 🔧 **read_file** — app/index.html
+
+### 🤖 Assistant
+
+Everything looks good. Here's a summary of what was done and why each decision was made:
+
+---
+
+## What was changed
+
+**[`app/index.html`](app/index.html:1762)** — the primary `frame 'load'` listener (was line 1763).
+
+### The race condition
+
+The page uses a `<script type="module">` that imports `dom-accessibility-api` from jsDelivr. ESM scripts are deferred and only execute after all their imports resolve — meaning the CDN fetch must complete first. The iframe, loading a local file, finishes far earlier. By the time the `frame.addEventListener('load', ...)` line runs, the iframe's `load` event has already fired and will never fire again. The auto-scan and axe score never appear on first open.
+
+### The fix
+
+The handler body was extracted into `onPageReady()`, guarded by a `_pageReadyRan` boolean to prevent double-execution:
+
+```js
+let _pageReadyRan = false;
+function onPageReady() {
+  if (_pageReadyRan) return;
+  _pageReadyRan = true;
+  // ... scan + axe
+}
+
+frame.addEventListener('load', () => {
+  _pageReadyRan = false;   // reset for each new navigation
+  onPageReady();
+});
+
+// Catch the already-loaded case (race condition)
+if (
+  frame.contentDocument &&
+  frame.contentDocument.readyState === 'complete' &&
+  frame.contentDocument.location.href !== 'about:blank'
+) {
+  onPageReady();
+}
+```
+
+The `_pageReadyRan` reset in the `load` listener ensures correct behaviour on subsequent navigations (e.g. changing the page via the `<select>`), while the guard prevents the immediate-call path and the event path from both executing for the same load.
+
+### The other two listeners
+
+- **Line 1823 (`onFixedLoad`)** — attached *inside* the morph button's click handler, *after* `frame.src = FIXED_URL` is set synchronously. Because the assignment and the `addEventListener` happen in the same synchronous tick before the browser can even start fetching the new URL, the `load` event is guaranteed to fire *after* the listener is attached. No race condition.
+- **Line 2615 (blind mode)** — attached at startup, but immediately returns when `!blindActive`. Since `blindActive` is `false` at startup and can only become `true` after a button click (which can't happen before page load), this listener is never active during the first load. No race condition.

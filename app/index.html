@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Usher — Screen Reader Simulator</title>
+  <title>Usher — your app, in the dark</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%230b0b0c'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23ffb347' opacity='0.95'/%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%23ffb347' stroke-width='1.5' opacity='0.35'/%3E%3Ccircle cx='16' cy='16' r='14' fill='none' stroke='%23ffb347' stroke-width='0.8' opacity='0.18'/%3E%3C/svg%3E">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -376,6 +377,30 @@
       line-height: 1.4;
       flex-shrink: 0;
     }
+    #hint-strip {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #1a2030;
+      border-bottom: 1px solid #2d3748;
+      padding: 0.45rem 1rem;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      line-height: 1.4;
+    }
+    #hint-strip.hidden { display: none; }
+    #hint-strip p { flex: 1; margin: 0; }
+    #hint-strip button {
+      background: none;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 1.1rem;
+      line-height: 1;
+      padding: 0 0.2rem;
+      flex-shrink: 0;
+    }
+    #hint-strip button:hover { color: #94a3b8; }
   </style>
 </head>
 <body>
@@ -395,6 +420,11 @@
   <button id="btn-morph">Show Bob's fix</button>
   <button id="btn-blind">Try it blind</button>
   <button class="btn-lights" id="btn-lights">Turn off the lights</button>
+</div>
+
+<div id="hint-strip">
+  <p>Press <strong>Turn off the lights</strong> to see what a blind user gets, or <strong>Try it blind</strong> to hear it yourself.</p>
+  <button id="hint-close" aria-label="Close hint">×</button>
 </div>
 
 <!-- Blind User Mode overlay (sits above everything) -->
@@ -586,9 +616,9 @@ function visitNode(root, result, doc) {
       if (!name) {
         result.push({ text: `link`, tag: 'noname', el: node });
       } else if (isUnclearName(name)) {
-        result.push({ text: `link, ${name}`, tag: 'unclear', el: node });
+        result.push({ text: `${name}, link`, tag: 'unclear', el: node });
       } else {
-        result.push({ text: `link, ${name}`, tag: 'ok', el: node });
+        result.push({ text: `${name}, link`, tag: 'ok', el: node });
       }
       markDescendantsSeen(node, seen);
       continue;
@@ -600,9 +630,9 @@ function visitNode(root, result, doc) {
       if (!name) {
         result.push({ text: `button`, tag: 'noname', el: node });
       } else if (isUnclearName(name)) {
-        result.push({ text: `button, ${name}`, tag: 'unclear', el: node });
+        result.push({ text: `${name}, button`, tag: 'unclear', el: node });
       } else {
-        result.push({ text: `button, ${name}`, tag: 'ok', el: node });
+        result.push({ text: `${name}, button`, tag: 'ok', el: node });
       }
       markDescendantsSeen(node, seen);
       continue;
@@ -619,9 +649,9 @@ function visitNode(root, result, doc) {
       if (name) {
         if (!node.hasAttribute('alt')) {
           const filename = getFilenameFromUrl(node.getAttribute('src') || '');
-          result.push({ text: `image, ${filename}`, tag: 'filename', el: node });
+          result.push({ text: `${filename}, image`, tag: 'filename', el: node });
         } else {
-          result.push({ text: `image, ${name}`, tag: 'ok', el: node });
+          result.push({ text: `${name}, image`, tag: 'ok', el: node });
         }
       } else {
         result.push({ text: `image`, tag: 'noname', el: node });
@@ -642,11 +672,11 @@ function visitNode(root, result, doc) {
       else if (type === 'submit' || type === 'button' || type === 'reset') roleLabel = 'button';
 
       if (name) {
-        result.push({ text: `${roleLabel}, ${name}`, tag: 'ok', el: node });
+        result.push({ text: `${name}, ${roleLabel}`, tag: 'ok', el: node });
       } else {
         const ph = node.getAttribute('placeholder');
         if (ph) {
-          result.push({ text: `${roleLabel}, ${ph}`, tag: 'noname', el: node });
+          result.push({ text: `${ph}, ${roleLabel}`, tag: 'noname', el: node });
         } else {
           result.push({ text: `${roleLabel}`, tag: 'noname', el: node });
         }
@@ -658,7 +688,7 @@ function visitNode(root, result, doc) {
     if (tag === 'textarea') {
       const name = computeAccessibleName(node).trim();
       if (name) {
-        result.push({ text: `edit text, ${name}`, tag: 'ok', el: node });
+        result.push({ text: `${name}, edit text`, tag: 'ok', el: node });
       } else {
         result.push({ text: `edit text`, tag: 'noname', el: node });
       }
@@ -669,7 +699,7 @@ function visitNode(root, result, doc) {
     if (tag === 'select') {
       const name = computeAccessibleName(node).trim();
       if (name) {
-        result.push({ text: `combo box, ${name}`, tag: 'ok', el: node });
+        result.push({ text: `${name}, combo box`, tag: 'ok', el: node });
       } else {
         result.push({ text: `combo box`, tag: 'noname', el: node });
       }
@@ -976,13 +1006,16 @@ function boxLabelForLine(line) {
   if (t === 'edit text')  return 'Edit text';
   if (t === 'combo box')  return 'Combo box';
   if (t === 'checkbox')   return 'Checkbox';
-  if (t.startsWith('button,'))             return 'Button';
-  if (t.startsWith('link,'))               return 'Link';
-  if (t.startsWith('image,'))              return 'Image';
-  if (t.startsWith('edit text,'))          return 'Edit text';
-  if (t.startsWith('search edit text'))    return 'Edit text';
-  if (t.startsWith('password edit text'))  return 'Edit text';
-  if (t.startsWith('combo box,'))          return 'Combo box';
+  // New format: "Name, role" — role is the last word/phrase after the final comma
+  if (t.endsWith(', button'))             return 'Button';
+  if (t.endsWith(', link'))               return 'Link';
+  if (t.endsWith(', image'))              return 'Image';
+  if (t.endsWith(', edit text'))          return 'Edit text';
+  if (t.endsWith(', search edit text'))   return 'Edit text';
+  if (t.endsWith(', password edit text')) return 'Edit text';
+  if (t.endsWith(', combo box'))          return 'Combo box';
+  if (t.endsWith(', checkbox'))           return 'Checkbox';
+  if (t.endsWith(', radio button'))       return 'Radio button';
   return t;
 }
 
@@ -1221,6 +1254,18 @@ function drawBoxes(doc, transcriptLines, container, problemCount, total, reduced
         lastTinyRight = pillRight;
         lastTinyAbove = pillAbove;
 
+        // Fix 5: clamp pill so it never goes off the left or right edge.
+        // estPillHalfW already computed above. Convert to a box-relative `left`
+        // (pill is position:absolute inside the box which is position:fixed at bl).
+        const vpW = doc.defaultView ? doc.defaultView.innerWidth : 1200;
+        const pillViewLeft = pillCentreX - estPillHalfW;
+        const pillViewRight = pillCentreX + estPillHalfW;
+        const EDGE_PAD = 6;
+        let pillViewLeftClamped = pillViewLeft;
+        if (pillViewLeft < EDGE_PAD) pillViewLeftClamped = EDGE_PAD;
+        if (pillViewRight > vpW - EDGE_PAD) pillViewLeftClamped = vpW - EDGE_PAD - estPillHalfW * 2;
+        const pillBoxLeft = pillViewLeftClamped - bl; // relative to box
+
         // Connector line (vertical, 1px wide, thin)
         const connector = doc.createElement('div');
         connector.style.cssText = `
@@ -1240,8 +1285,8 @@ function drawBoxes(doc, transcriptLines, container, problemCount, total, reduced
         const pill = doc.createElement('span');
         pill.style.cssText = `
           position: absolute;
-          left: 50%;
-          transform: translateX(-50%);
+          left: ${pillBoxLeft}px;
+          transform: none;
           ${pillAbove
             ? `bottom: ${bh + CONNECTOR_H}px;`
             : `top: ${bh + CONNECTOR_H}px;`}
@@ -1714,15 +1759,42 @@ document.addEventListener('click', e => {
   if (!axeScore.contains(e.target)) axeBreakdown.classList.remove('open');
 });
 
-// Run axe whenever the iframe finishes loading
-frame.addEventListener('load', () => {
+// Run axe + auto-scan whenever the iframe finishes loading.
+// Named so we can also call it immediately if the frame already loaded
+// before this module script ran (race condition: ESM waits for CDN import).
+let _pageReadyRan = false;
+function onPageReady() {
+  if (_pageReadyRan) return;
+  _pageReadyRan = true;
+
   const doc = frame.contentDocument;
   if (!doc || !doc.body) return;
+
+  // Auto-scan: fill the transcript immediately so judges see results on load.
+  // Skip if lights are off (collapse manages lines), morph is in progress,
+  // or blind mode is active (it manages lines lazily).
+  if (!collapseActive && !morphInProgress && !blindActive) {
+    lines = buildTranscript(doc);
+    renderTranscript();
+    btnRead.disabled = lines.length === 0;
+  }
+
   runAxe(doc).then(result => {
     showAxeScore(result);
   }).catch(() => {
     hideAxeScore();
   });
+}
+
+frame.addEventListener('load', () => {
+  _pageReadyRan = false; // reset for each new navigation
+  onPageReady();
+});
+
+
+// Hint strip close
+document.getElementById('hint-close').addEventListener('click', () => {
+  document.getElementById('hint-strip').classList.add('hidden');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1824,9 +1896,10 @@ function applyLightsOffInstant(doc, transcriptLines) {
 // ── Role compatibility for morph matching ────────────────────────────────────
 function lineRole(line) {
   const t = line.text;
-  if (t === 'button' || t.startsWith('button,')) return 'button';
-  if (t === 'link'   || t.startsWith('link,'))   return 'link';
-  if (t === 'image'  || t.startsWith('image,'))  return 'image';
+  // New format: "Name, role" — check both standalone and suffixed forms
+  if (t === 'button' || t.endsWith(', button')) return 'button';
+  if (t === 'link'   || t.endsWith(', link'))   return 'link';
+  if (t === 'image'  || t.endsWith(', image'))  return 'image';
   if (t.includes('edit text')) return 'input';
   if (t.includes('combo box')) return 'select';
   if (t.includes('heading level')) return 'heading';
@@ -2067,6 +2140,16 @@ function buildAfterBoxEls(doc, afterTranscript, container) {
       lastTinyRight = pillRight;
       lastTinyAbove = pillAbove;
 
+      // Fix 5: clamp pill to viewport
+      const vpW2 = doc.defaultView ? doc.defaultView.innerWidth : 1200;
+      const pillViewLeft2 = pillCentreX - estPillHalfW;
+      const pillViewRight2 = pillCentreX + estPillHalfW;
+      const EDGE_PAD2 = 6;
+      let pillViewLeftClamped2 = pillViewLeft2;
+      if (pillViewLeft2 < EDGE_PAD2) pillViewLeftClamped2 = EDGE_PAD2;
+      if (pillViewRight2 > vpW2 - EDGE_PAD2) pillViewLeftClamped2 = vpW2 - EDGE_PAD2 - estPillHalfW * 2;
+      const pillBoxLeft2 = pillViewLeftClamped2 - bl;
+
       const connector = doc.createElement('div');
       connector.style.cssText = `
         position: absolute;
@@ -2082,8 +2165,8 @@ function buildAfterBoxEls(doc, afterTranscript, container) {
       const pill = doc.createElement('span');
       pill.style.cssText = `
         position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
+        left: ${pillBoxLeft2}px;
+        transform: none;
         ${pillAbove ? `bottom: ${bh + CONNECTOR_H}px;` : `top: ${bh + CONNECTOR_H}px;`}
         white-space: nowrap;
         font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
@@ -2313,11 +2396,11 @@ function spokenTextForEl(el) {
   const role = el.getAttribute('role') || null;
   if (tag === 'button' || role === 'button') {
     const name = computeAccessibleName(el).trim();
-    return name ? `button, ${name}` : 'button';
+    return name ? `${name}, button` : 'button';
   }
   if (tag === 'a' && el.hasAttribute('href')) {
     const name = computeAccessibleName(el).trim();
-    return name ? `link, ${name}` : 'link';
+    return name ? `${name}, link` : 'link';
   }
   if (tag === 'input') {
     const name = computeAccessibleName(el).trim();
@@ -2328,15 +2411,15 @@ function spokenTextForEl(el) {
       : type === 'radio'    ? 'radio button'
       : (type === 'submit' || type === 'button' || type === 'reset') ? 'button'
       : 'edit text';
-    return name ? `${roleLabel}, ${name}` : roleLabel;
+    return name ? `${name}, ${roleLabel}` : roleLabel;
   }
   if (tag === 'select') {
     const name = computeAccessibleName(el).trim();
-    return name ? `combo box, ${name}` : 'combo box';
+    return name ? `${name}, combo box` : 'combo box';
   }
   if (tag === 'textarea') {
     const name = computeAccessibleName(el).trim();
-    return name ? `edit text, ${name}` : 'edit text';
+    return name ? `${name}, edit text` : 'edit text';
   }
   const name = computeAccessibleName(el).trim();
   return name || el.tagName.toLowerCase();
@@ -2555,6 +2638,16 @@ frame.addEventListener('load', () => {
   const title = doc.title || 'new page';
   blindSpeak(`Loaded ${title}. Tab to navigate, Down arrow to read.`);
 });
+
+// Runs last, after every variable onPageReady() reads has been declared.
+// If the iframe already finished loading before this script ran, fire now.
+if (
+  frame.contentDocument &&
+  frame.contentDocument.readyState === 'complete' &&
+  frame.contentDocument.location.href !== 'about:blank'
+) {
+  onPageReady();
+}
 
 </script>
 </body>
