@@ -535,7 +535,7 @@ let lastAxeResult = null; // saved for the "Copy for Bob" report
 // Fixed-version map: for each page URL, the URL of its fixed copy
 const FIXED_MAP = {
   '../demo/broken/index.html':              '../demo/fixed/index.html',
-  '../demo/real/freelancer/index.html':     '../demo/real/freelancer/index.fixed.html',
+  // The Freelancer entry is added below only if its fixed copy exists.
 };
 
 /** Return the fixed URL for the current page, or null if none configured. */
@@ -549,6 +549,7 @@ function fixedUrlForCurrent() {
   try {
     const res = await fetch(fixedPath, { method: 'HEAD' });
     if (res.ok) {
+      FIXED_MAP['../demo/real/freelancer/index.html'] = fixedPath;
       const opt = document.createElement('option');
       opt.value = fixedPath;
       opt.textContent = 'Freelancer (fixed by Bob)';
